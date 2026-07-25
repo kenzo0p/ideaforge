@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IdeaForge — Search Less. Solve More.
 
-## Getting Started
+An **AI-powered Research & Innovation Copilot for students**, built for the **iNSIGHTS Track**.
+Drop in a one-line idea and IdeaForge takes you from *problem discovery* to a *validated,
+buildable project* — problem validation, citation-backed research, an auto-generated build
+plan, and the resources to ship it.
 
-First, run the development server:
+> Enter: _"Build an AI solution to reduce food waste in college hostels."_
+> Get back: problem validation → research → solution comparison → innovation gaps →
+> architecture → roadmap → tech stack → repos, APIs & datasets → timeline → deck-ready docs.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Status — built in parts
+
+| Part | Scope | Status |
+|------|-------|--------|
+| **1** | Foundation: provider abstraction, iNSIGHTS Layer 2 service seam, idea → **problem validation** (streamed) | ✅ Done |
+| **2** | **DeepSearch** + **Real-time Web Intelligence** — web search, citation-backed research, solution comparison, gaps | ✅ Done |
+| **3** | **Project HUB** + **Knowledge Clustering** — milestones, architecture, stack, APIs, timeline; repos/datasets/papers | ✅ Done |
+| **4** | **Personalized Dashboards** + **Research Workspaces** — SQLite persistence, save/open projects, sources/notes/decisions | ✅ Done |
+| **5** | **AI Agents** (in-app console + Telegram webhook) + **Multilingual** (8-language selector, locale threaded end-to-end) | ✅ Done |
+
+The brief requires **≥4** Layer 2 capabilities; **all eight are live.** 🎉
+
+## Architecture
+
+Two clean seams keep features decoupled from vendors:
+
+```
+UI / API routes
+      │
+      ▼
+lib/insights/layer2.ts   ← the iNSIGHTS Layer 2 service (one method per capability)
+      │            │
+      ▼            ▼
+lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
+(OpenAI·Anthropic·Mock)        (Tavily·Mock)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **`lib/ai`** — a tiny `AIProvider` interface (`streamText` / `generateText`) with three
+  implementations. `getProvider()` auto-selects from env. The **Mock** provider synthesizes
+  realistic output locally, so the whole app runs with **zero API keys**.
+- **`lib/search`** — a `SearchProvider` interface powering DeepSearch. **Tavily** for live web
+  results, **Mock** for offline demos (clearly labeled in the UI).
+- **`lib/insights`** — `Layer2Service` is the single seam the copilot's features call. Swapping
+  in the real iNSIGHTS Layer 2 API later means editing only `layer2.ts`.
+- **`lib/db`** — SQLite persistence via Node's built-in **`node:sqlite`** (zero dependencies,
+  zero native build). Projects + Research Workspace items; mutations go through Server Actions
+  in `lib/actions.ts`. DB file lives at `data/ideaforge.db` (git-ignored).
+- **`lib/agents`** — one channel-agnostic `handleAgentMessage()` brain powering both the in-app
+  **Agent Console** (`/api/agents/message`) and a **Telegram webhook** (`/api/agents/telegram`).
+  Commands (`/status`, `/next`, `/plan`, `/projects`) run locally; free-text is answered by the
+  LLM grounded in the project's saved artifacts. Works with no token; connects a real bot when
+  `TELEGRAM_BOT_TOKEN` is set (see `.env.example`).
+- **Multilingual** — an 8-language selector threads a BCP-47 `locale` through every prompt, so a
+  live model responds in the chosen language across validation, research, plan, and the agent.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Run it
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+npm run dev      # http://localhost:3000  (uses 3005 in a shared setup)
+```
 
-## Learn More
+No keys needed — it starts on the **Demo (offline)** provider. To use a live model, copy
+`.env.example` to `.env.local` and set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
-To learn more about Next.js, take a look at the following resources:
+## Stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · streaming API routes.

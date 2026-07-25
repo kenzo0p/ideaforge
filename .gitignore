@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# IdeaForge SQLite data
+/data
+*.db
+*.db-*
