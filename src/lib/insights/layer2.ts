@@ -1,8 +1,12 @@
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider, type SearchResult } from "@/lib/search";
+import { discoverResources } from "@/lib/resources";
 import {
   deepResearchMessages,
   deepResearchQueries,
+  keywordsFor,
+  problemDiscoveryMessages,
+  problemDiscoveryQueries,
   problemValidationMessages,
   projectHubMessages,
   resourceQueries,
@@ -11,10 +15,13 @@ import type {
   ApiRecommendation,
   ArchitectureComponent,
   Citation,
+  DiscoverInput,
+  DiscoveredProblem,
   IdeaInput,
   KnowledgeCluster,
   Layer2Capability,
   Milestone,
+  ProblemDiscovery,
   ProjectPlan,
   ResearchReport,
   Resource,
@@ -41,6 +48,9 @@ export interface Layer2Service {
   /** DeepSearch + Real-time Web Intelligence: grounded research (Part 2). */
   deepSearch(input: IdeaInput, signal?: AbortSignal): Promise<ResearchReport>;
 
+  /** Discover real-world problems worth solving in a domain. */
+  discoverProblems(input: DiscoverInput, signal?: AbortSignal): Promise<ProblemDiscovery>;
+
   /** Project HUB + Knowledge Clustering: full build plan (Part 3). */
   projectHub(
     input: IdeaInput,
@@ -51,6 +61,7 @@ export interface Layer2Service {
 
 class DefaultLayer2 implements Layer2Service {
   readonly capabilities: Record<Layer2Capability, boolean> = {
+    "problem-discovery": true,
     "deep-search": true,
     "web-intelligence": true,
     "project-hub": true,
@@ -95,7 +106,7 @@ class DefaultLayer2 implements Layer2Service {
     const raw = await getProvider().generateText({
       messages: deepResearchMessages(input.idea, results, input.locale),
       temperature: 0.3,
-      maxTokens: 1800,
+      maxTokens: 8000,
       json: true,
       signal,
     });
@@ -117,6 +128,41 @@ class DefaultLayer2 implements Layer2Service {
     };
   }
 
+  async discoverProblems(input: DiscoverInput, signal?: AbortSignal): Promise<ProblemDiscovery> {
+    const searcher = getSearchProvider();
+    const domain = input.domain?.trim() || "";
+
+    // Ground discovery in current, real-world signals.
+    const batches = await Promise.all(
+      problemDiscoveryQueries(domain).map((q) =>
+        searcher.search(q, { maxResults: 4, signal }).catch(() => [] as SearchResult[]),
+      ),
+    );
+    const results = dedupeByUrl(batches.flat()).slice(0, 10);
+    const sources: Citation[] = results.map((r, i) => ({
+      id: i + 1,
+      title: r.title,
+      url: r.url,
+      source: r.source,
+      snippet: r.content?.slice(0, 240),
+    }));
+
+    const raw = await getProvider().generateText({
+      messages: problemDiscoveryMessages(domain, results, input.locale),
+      maxTokens: 4000,
+      json: true,
+      signal,
+    });
+    const parsed = safeParse(raw);
+
+    return {
+      domain: domain || "general",
+      problems: Array.isArray(parsed.problems) ? (parsed.problems as DiscoveredProblem[]) : [],
+      sources,
+      demo: searcher.isMock || getProvider().isMock,
+    };
+  }
+
   async projectHub(
     input: IdeaInput,
     research: ResearchReport | null,
@@ -125,25 +171,31 @@ class DefaultLayer2 implements Layer2Service {
     const searcher = getSearchProvider();
     const provider = getProvider();
 
-    // Ground repo/dataset/paper recommendations in real search results.
-    const batches = await Promise.all(
-      resourceQueries(input.idea).map((q) =>
-        searcher.search(q, { maxResults: 3, signal }).catch(() => [] as SearchResult[]),
-      ),
-    );
-    const resources = dedupeByUrl(batches.flat());
-    const { repos, datasets, papers } = categorizeResources(resources);
+    // Prefer real, dedicated sources: GitHub (repos), Kaggle (datasets),
+    // CORE (papers). Keyword queries (not the full sentence) return far better
+    // results from these APIs. Each bucket falls back to categorized web-search
+    // results when its provider isn't configured or returns nothing.
+    const discovered = await discoverResources(keywordsFor(input.idea));
+    let { repos, datasets, papers } = discovered;
+
+    if (repos.length === 0 || datasets.length === 0 || papers.length === 0) {
+      const batches = await Promise.all(
+        resourceQueries(input.idea).map((q) =>
+          searcher.search(q, { maxResults: 3, signal }).catch(() => [] as SearchResult[]),
+        ),
+      );
+      const fallback = categorizeResources(dedupeByUrl(batches.flat()));
+      if (repos.length === 0) repos = fallback.repos;
+      if (datasets.length === 0) datasets = fallback.datasets;
+      if (papers.length === 0) papers = fallback.papers;
+    }
 
     // LLM designs the plan; it sees resource titles but never sets their URLs.
+    const resourceTitles = [...repos, ...datasets, ...papers].map((r) => r.title).slice(0, 9);
     const raw = await provider.generateText({
-      messages: projectHubMessages(
-        input.idea,
-        research,
-        resources.map((r) => r.title).slice(0, 9),
-        input.locale,
-      ),
+      messages: projectHubMessages(input.idea, research, resourceTitles, input.locale),
       temperature: 0.35,
-      maxTokens: 2400,
+      maxTokens: 6000,
       json: true,
       signal,
     });
@@ -227,21 +279,66 @@ function asArray<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
 }
 
-/** Parse model JSON, tolerating stray prose or code fences around it. */
+/** Parse model JSON, tolerating ```json fences, prose, and mild truncation. */
 function safeParse(raw: string): Record<string, unknown> {
+  // Strip surrounding markdown code fences (Claude wraps JSON in ```json … ```).
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
   try {
-    return JSON.parse(raw);
+    return JSON.parse(cleaned);
   } catch {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        /* fall through */
+    // Greedy braces first (complete object), then a repair pass for truncation.
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    const candidate = match ? match[0] : cleaned;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      const repaired = repairTruncatedJson(candidate);
+      if (repaired) {
+        try {
+          return JSON.parse(repaired);
+        } catch {
+          /* give up */
+        }
       }
     }
     return {};
   }
+}
+
+/**
+ * Best-effort repair of JSON truncated mid-generation: drop any trailing partial
+ * token, then close open strings/brackets so the salvageable prefix parses.
+ */
+function repairTruncatedJson(s: string): string | null {
+  let str = s.replace(/,\s*$/, "");
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (const ch of str) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') inString = !inString;
+    else if (!inString) {
+      if (ch === "{" || ch === "[") stack.push(ch);
+      else if (ch === "}" || ch === "]") stack.pop();
+    }
+  }
+  if (!stack.length && !inString) return null; // nothing to repair
+  if (inString) str += '"';
+  str = str.replace(/,\s*$/, "");
+  while (stack.length) str += stack.pop() === "{" ? "}" : "]";
+  return str;
 }
 
 let instance: Layer2Service | null = null;

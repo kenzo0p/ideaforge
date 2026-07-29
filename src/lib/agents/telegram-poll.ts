@@ -1,0 +1,86 @@
+import { getUserByChatId, linkTelegramChat } from "@/lib/db/telegram";
+import { handleAgentMessage } from "./handler";
+import {
+  deleteTelegramWebhook,
+  getTelegramUpdates,
+  sendTelegramMessage,
+  type TelegramUpdate,
+} from "./telegram";
+
+// ---------------------------------------------------------------------------
+// Telegram long-polling worker.
+//
+// Runs inside the Node server (started from instrumentation.ts). Long-polling
+// works from localhost with no public webhook URL. Guarded by a globalThis flag
+// so dev/HMR restarts don't spawn duplicate loops.
+// ---------------------------------------------------------------------------
+
+const g = globalThis as unknown as { __ideaforgeTelegramPolling?: boolean };
+
+export function startTelegramPolling(): void {
+  if (g.__ideaforgeTelegramPolling) return;
+  if (!process.env.TELEGRAM_BOT_TOKEN) return;
+  g.__ideaforgeTelegramPolling = true;
+  void loop();
+}
+
+async function loop(): Promise<void> {
+  // Webhook and getUpdates are mutually exclusive — clear any webhook first.
+  await deleteTelegramWebhook();
+  console.log("🤖 Telegram bot: long-polling started.");
+
+  let offset = 0;
+  while (true) {
+    try {
+      const updates = await getTelegramUpdates(offset, 30);
+      for (const update of updates) {
+        offset = update.update_id + 1;
+        await handleUpdate(update).catch((e) => console.error("Telegram handler error:", e));
+      }
+    } catch (err) {
+      // Network blip / transient error — back off briefly and retry.
+      console.error("Telegram poll error:", err instanceof Error ? err.message : err);
+      await sleep(3000);
+    }
+  }
+}
+
+async function handleUpdate(update: TelegramUpdate): Promise<void> {
+  const msg = update.message;
+  const text = msg?.text?.trim();
+  const chatId = msg?.chat?.id;
+  if (!text || chatId === undefined) return;
+
+  // Linking: /start <code> (t.me deep link) or /link <code>.
+  const linkMatch = text.match(/^\/(?:start|link)\s+(\S+)/i);
+  if (linkMatch) {
+    const user = linkTelegramChat(linkMatch[1], chatId);
+    await sendTelegramMessage(
+      chatId,
+      user
+        ? `✅ Connected to *${user.email}*.\nYou can now ask about your projects — try /projects, /status, or /next.`
+        : "⚠️ That link code is invalid or expired. Generate a new one from IdeaForge → Connect Telegram.",
+    );
+    return;
+  }
+
+  // Bare /start with no code.
+  if (/^\/start$/i.test(text)) {
+    await sendTelegramMessage(
+      chatId,
+      "👋 *IdeaForge Agent*\nConnect your account to get started: open IdeaForge → *Connect Telegram* and tap the link. Then try /projects.",
+    );
+    return;
+  }
+
+  // Everything else: scope to the linked user (may be null → handler prompts to link).
+  const user = getUserByChatId(chatId);
+  const reply = await handleAgentMessage({
+    text,
+    userId: user?.id ?? null,
+    channel: "telegram",
+  });
+  await sendTelegramMessage(chatId, reply);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -4,18 +4,13 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowUp, Bookmark, Check, Languages, Loader2, Rocket, Search, Sparkles, Square } from "lucide-react";
+import { ArrowUp, Bookmark, Check, Compass, Languages, Lightbulb, Loader2, Rocket, Search, Sparkles, Square } from "lucide-react";
 import ResearchPanel from "@/components/ResearchPanel";
 import ProjectPlanPanel from "@/components/ProjectPlanPanel";
+import DiscoverPanel from "@/components/DiscoverPanel";
+import { USAGE_EVENT } from "@/components/UsageMeter";
 import { saveProjectAction } from "@/lib/actions";
 import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
-
-const EXAMPLES = [
-  "Build an AI solution to reduce food waste in college hostels.",
-  "An app that helps first-gen students navigate scholarships.",
-  "Use ML to detect crop disease from a phone photo.",
-  "A tool that turns lecture recordings into structured notes.",
-];
 
 // Multilingual: BCP-47 locales the copilot can respond in.
 const LANGUAGES: Array<{ code: string; label: string }> = [
@@ -32,13 +27,20 @@ const LANGUAGES: Array<{ code: string; label: string }> = [
 type Status = "idle" | "streaming" | "done" | "error";
 type ResearchStatus = "idle" | "loading" | "done" | "error";
 
-export default function IdeaConsole() {
+export default function IdeaConsole({
+  isAuthed = false,
+  defaultLocale = "en",
+}: {
+  isAuthed?: boolean;
+  defaultLocale?: string;
+}) {
   const [idea, setIdea] = useState("");
   const [analyzedIdea, setAnalyzedIdea] = useState("");
   const [output, setOutput] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [provider, setProvider] = useState<string | null>(null);
-  const [locale, setLocale] = useState("en");
+  const [locale, setLocale] = useState(defaultLocale);
+  const [mode, setMode] = useState<"idea" | "discover">("idea");
   const abortRef = useRef<AbortController | null>(null);
 
   // DeepSearch (Part 2)
@@ -85,7 +87,12 @@ export default function IdeaConsole() {
         signal: controller.signal,
       });
       setProvider(res.headers.get("X-Provider"));
+      window.dispatchEvent(new Event(USAGE_EVENT));
 
+      if (res.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
       if (!res.ok || !res.body) {
         const { error } = await res.json().catch(() => ({ error: "Request failed." }));
         setOutput(`> ⚠️ ${error ?? "Request failed."}`);
@@ -128,6 +135,11 @@ export default function IdeaConsole() {
         body: JSON.stringify({ idea: analyzedIdea, locale }),
       });
       setSearchProvider(res.headers.get("X-Search-Provider"));
+      window.dispatchEvent(new Event(USAGE_EVENT));
+      if (res.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
       if (!res.ok) {
         const { error } = await res.json().catch(() => ({ error: "Request failed." }));
         setResearchError(error ?? "DeepSearch failed.");
@@ -154,6 +166,11 @@ export default function IdeaConsole() {
         body: JSON.stringify({ idea: analyzedIdea, research: report ?? undefined, locale }),
       });
       setPlanProvider(res.headers.get("X-Provider"));
+      window.dispatchEvent(new Event(USAGE_EVENT));
+      if (res.status === 401) {
+        router.push("/sign-in");
+        return;
+      }
       if (!res.ok) {
         const { error } = await res.json().catch(() => ({ error: "Request failed." }));
         setPlanError(error ?? "Project HUB failed.");
@@ -170,6 +187,11 @@ export default function IdeaConsole() {
 
   async function saveProject() {
     if (!analyzedIdea || saving) return;
+    // Saving requires an account — send guests to sign in.
+    if (!isAuthed) {
+      router.push("/sign-in");
+      return;
+    }
     setSaving(true);
     try {
       const { id } = await saveProjectAction({
@@ -190,8 +212,35 @@ export default function IdeaConsole() {
 
   const streaming = status === "streaming";
 
+  const modeBtn = (active: boolean) =>
+    `inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+      active ? "bg-brand text-white shadow-sm" : "text-muted hover:text-foreground"
+    }`;
+
   return (
     <div className="w-full">
+      {/* Mode toggle: bring your own idea, or discover a problem worth solving */}
+      <div className="mb-4 inline-flex rounded-lg border border-border bg-card p-0.5">
+        <button onClick={() => setMode("idea")} className={modeBtn(mode === "idea")}>
+          <Sparkles className="size-4" /> I have an idea
+        </button>
+        <button onClick={() => setMode("discover")} className={modeBtn(mode === "discover")}>
+          <Lightbulb className="size-4" /> Find a problem
+        </button>
+      </div>
+
+      {mode === "discover" && (
+        <DiscoverPanel
+          locale={locale}
+          onForge={(starter) => {
+            setMode("idea");
+            analyze(starter);
+          }}
+        />
+      )}
+
+      {mode === "idea" && (
+        <>
       {/* Composer */}
       <form
         onSubmit={(e) => {
@@ -252,21 +301,6 @@ export default function IdeaConsole() {
         </div>
       </form>
 
-      {/* Example chips */}
-      {status === "idle" && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {EXAMPLES.map((ex) => (
-            <button
-              key={ex}
-              onClick={() => analyze(ex)}
-              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted transition hover:border-brand/50 hover:text-foreground"
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* Result */}
       {(output || streaming) && (
         <div className="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -295,7 +329,7 @@ export default function IdeaConsole() {
                   ) : (
                     <Bookmark className="size-3.5" />
                   )}
-                  {savedId ? "Update" : "Save to dashboard"}
+                  {!isAuthed ? "Sign in to save" : savedId ? "Update" : "Save to dashboard"}
                 </button>
               )}
               {streaming && <Loader2 className="size-3.5 animate-spin" />}
@@ -373,6 +407,8 @@ export default function IdeaConsole() {
         </div>
       )}
       {planStatus === "done" && plan && <ProjectPlanPanel plan={plan} provider={planProvider} />}
+        </>
+      )}
     </div>
   );
 }

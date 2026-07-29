@@ -22,8 +22,47 @@ export async function sendTelegramMessage(chatId: number | string, text: string)
 
 /** Shape of the parts of a Telegram update we care about. */
 export interface TelegramUpdate {
+  update_id: number;
   message?: {
     chat: { id: number };
     text?: string;
+    from?: { first_name?: string };
   };
+}
+
+function apiBase(): string {
+  return `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
+}
+
+/** Long-poll for updates since `offset`. Blocks up to `timeout` seconds. */
+export async function getTelegramUpdates(
+  offset: number,
+  timeout = 30,
+  signal?: AbortSignal,
+): Promise<TelegramUpdate[]> {
+  const res = await fetch(`${apiBase()}/getUpdates?offset=${offset}&timeout=${timeout}`, { signal });
+  if (!res.ok) throw new Error(`getUpdates failed (${res.status})`);
+  const data: { ok: boolean; result?: TelegramUpdate[] } = await res.json();
+  return data.result ?? [];
+}
+
+/** Remove any configured webhook so long-polling can run without conflict. */
+export async function deleteTelegramWebhook(): Promise<void> {
+  await fetch(`${apiBase()}/deleteWebhook?drop_pending_updates=false`).catch(() => {});
+}
+
+let cachedUsername: string | null = null;
+
+/** The bot's @username (for building t.me deep links). Cached after first call. */
+export async function getBotUsername(): Promise<string | null> {
+  if (cachedUsername) return cachedUsername;
+  if (!process.env.TELEGRAM_BOT_TOKEN) return null;
+  try {
+    const res = await fetch(`${apiBase()}/getMe`);
+    const data: { ok: boolean; result?: { username?: string } } = await res.json();
+    cachedUsername = data.result?.username ?? null;
+    return cachedUsername;
+  } catch {
+    return null;
+  }
 }

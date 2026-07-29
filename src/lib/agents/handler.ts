@@ -1,6 +1,7 @@
 import { getProvider } from "@/lib/ai";
 import { getProject, listProjects, type Project } from "@/lib/db/projects";
 import { agentReplyMessages } from "@/lib/insights/prompts";
+import { projectNextStep } from "@/lib/insights/next-step";
 
 // ---------------------------------------------------------------------------
 // AI Agent — channel-agnostic message handler
@@ -13,6 +14,8 @@ import { agentReplyMessages } from "@/lib/insights/prompts";
 
 export interface AgentInput {
   text: string;
+  /** The authenticated user; project data is scoped to them. */
+  userId?: string | null;
   /** Project the conversation is scoped to (from the console, or a Telegram session). */
   projectId?: string | null;
   channel?: "console" | "telegram";
@@ -34,8 +37,15 @@ export async function handleAgentMessage(input: AgentInput): Promise<string> {
 
   if (cmd === "/help" || cmd === "help") return HELP;
 
+  // Project data requires an authenticated user (the console passes userId).
+  if (!input.userId) {
+    return input.channel === "telegram"
+      ? "🔒 Connect your account first: open IdeaForge → *Connect Telegram* and tap the link, then come back."
+      : "🔒 Connect your IdeaForge account to ask about your projects. Sign in at the app to continue.";
+  }
+
   if (cmd === "/projects" || cmd === "projects" || cmd.startsWith("list")) {
-    const projects = listProjects();
+    const projects = listProjects(input.userId);
     if (projects.length === 0) return "You have no saved projects yet. Create one in IdeaForge first.";
     return (
       "📁 *Your projects:*\n" +
@@ -43,7 +53,7 @@ export async function handleAgentMessage(input: AgentInput): Promise<string> {
     );
   }
 
-  const project = input.projectId ? getProject(input.projectId) : null;
+  const project = input.projectId ? getProject(input.projectId, input.userId) : null;
 
   if (!project) {
     if (cmd.startsWith("/")) return "Open a project first, then I can answer /status, /next, and /plan for it.";
@@ -52,7 +62,8 @@ export async function handleAgentMessage(input: AgentInput): Promise<string> {
   }
 
   if (cmd === "/status" || cmd === "status") return statusReply(project);
-  if (cmd === "/next" || cmd === "next") return `➡️ Next step for *${project.title}*: ${nextAction(project)}`;
+  if (cmd === "/next" || cmd === "next")
+    return `➡️ Next step for *${project.title}*: ${projectNextStep(project)}`;
   if (cmd === "/plan" || cmd === "plan") return planReply(project);
 
   // Free-text question → grounded LLM answer.
@@ -65,20 +76,13 @@ export async function handleAgentMessage(input: AgentInput): Promise<string> {
   return reply.trim() || "I couldn't come up with a good answer — try rephrasing?";
 }
 
-function nextAction(p: Project): string {
-  if (!p.validationMarkdown) return "validate the idea";
-  if (!p.research) return "run DeepSearch for citation-backed research";
-  if (!p.plan) return "generate the project plan in Project HUB";
-  return "start building — pick the first milestone and log decisions in the workspace";
-}
-
 function statusReply(p: Project): string {
   const done = [
     p.validationMarkdown ? "✅ Validation" : "⬜ Validation",
     p.research ? "✅ Research" : "⬜ Research",
     p.plan ? "✅ Plan" : "⬜ Plan",
   ].join("\n");
-  return `📊 *${p.title}*\n${done}\n\n➡️ Next: ${nextAction(p)}`;
+  return `📊 *${p.title}*\n${done}\n\n➡️ Next: ${projectNextStep(p)}`;
 }
 
 function planReply(p: Project): string {

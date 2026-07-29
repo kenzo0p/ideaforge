@@ -1,13 +1,22 @@
 import Link from "next/link";
-import { ArrowRight, LayoutDashboard, Plus } from "lucide-react";
-import DeleteProjectButton from "@/components/DeleteProjectButton";
-import { listProjects, type ProjectSummary } from "@/lib/db/projects";
-import { timeAgo } from "@/lib/format";
+import { redirect } from "next/navigation";
+import { Compass, LayoutDashboard, Plus, Rocket, Sparkles } from "lucide-react";
+import ConnectTelegram from "@/components/ConnectTelegram";
+import ProjectFilters from "@/components/ProjectFilters";
+import { listProjects, milestoneCounts } from "@/lib/db/projects";
+import { isTelegramLinked } from "@/lib/db/telegram";
+import { isTelegramConfigured } from "@/lib/agents/telegram";
+import { getCurrentUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic"; // always reflect the latest saved data
 
-export default function DashboardPage() {
-  const projects = listProjects();
+export default async function DashboardPage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/sign-in");
+  const projects = listProjects(user.id);
+  const doneCounts = milestoneCounts(user.id);
+  const telegramConfigured = isTelegramConfigured();
+  const telegramLinked = telegramConfigured && isTelegramLinked(user.id);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-10">
@@ -31,75 +40,36 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {telegramConfigured && (
+        <div className="mb-6">
+          <ConnectTelegram linked={telegramLinked} />
+        </div>
+      )}
+
       {projects.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} />
-          ))}
-        </div>
+        <ProjectFilters projects={projects} doneCounts={doneCounts} />
       )}
     </main>
-  );
-}
-
-function nextAction(p: ProjectSummary): string {
-  if (!p.hasValidation) return "Validate the idea";
-  if (!p.hasResearch) return "Run DeepSearch";
-  if (!p.hasPlan) return "Generate project plan";
-  return "Open research workspace";
-}
-
-function ProjectCard({ project: p }: { project: ProjectSummary }) {
-  const steps: Array<[string, boolean]> = [
-    ["Validation", p.hasValidation],
-    ["Research", p.hasResearch],
-    ["Plan", p.hasPlan],
-  ];
-
-  return (
-    <div className="group flex flex-col rounded-xl border border-border bg-card p-4 transition hover:border-brand/40">
-      <div className="flex items-start justify-between gap-2">
-        <Link href={`/projects/${p.id}`} className="font-semibold leading-snug hover:text-brand">
-          {p.title}
-        </Link>
-        <DeleteProjectButton id={p.id} />
-      </div>
-      <p className="mt-1 line-clamp-2 text-sm text-muted">{p.idea}</p>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {steps.map(([label, done]) => (
-          <span
-            key={label}
-            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-              done
-                ? "bg-emerald-500/15 text-emerald-500"
-                : "border border-border text-muted"
-            }`}
-          >
-            {done ? "✓ " : ""}
-            {label}
-          </span>
-        ))}
-      </div>
-
-      <div className="mt-auto flex items-center justify-between pt-4 text-xs text-muted">
-        <span>{timeAgo(p.updatedAt)}</span>
-        <Link
-          href={`/projects/${p.id}`}
-          className="inline-flex items-center gap-1 font-medium text-brand opacity-0 transition group-hover:opacity-100"
-        >
-          {nextAction(p)} <ArrowRight className="size-3" />
-        </Link>
-      </div>
-    </div>
   );
 }
 
 function EmptyState() {
   return (
     <div className="rounded-2xl border border-dashed border-border bg-card/50 p-12 text-center">
+      {/* Subtle layered illustration built from brand tiles + icons */}
+      <div className="relative mx-auto mb-5 h-20 w-24">
+        <span className="absolute left-1 top-2 flex size-14 rotate-[-8deg] items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
+          <Compass className="size-6 text-muted" />
+        </span>
+        <span className="absolute right-1 top-0 flex size-14 rotate-[8deg] items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
+          <Rocket className="size-6 text-muted" />
+        </span>
+        <span className="absolute bottom-0 left-1/2 flex size-16 -translate-x-1/2 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-white shadow-md">
+          <Sparkles className="size-7" />
+        </span>
+      </div>
       <p className="text-lg font-semibold">No projects yet</p>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
         Start with an idea, validate it, run DeepSearch, and generate a plan — then hit{" "}

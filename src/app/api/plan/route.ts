@@ -1,6 +1,7 @@
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider } from "@/lib/search";
 import { getLayer2 } from "@/lib/insights/layer2";
+import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 import type { ResearchReport } from "@/lib/insights/types";
 
 export const runtime = "nodejs";
@@ -9,6 +10,11 @@ export const maxDuration = 60;
 // POST /api/plan — Project HUB. Turns an idea (optionally enriched with a prior
 // research report) into a full ProjectPlan and returns it as JSON.
 export async function POST(req: Request) {
+  const auth = await requireApiUser();
+  if (auth instanceof Response) return auth;
+  const limited = enforceRateLimit(auth.id, "copilot");
+  if (limited) return limited;
+
   let body: { idea?: string; locale?: string; research?: ResearchReport };
   try {
     body = await req.json();

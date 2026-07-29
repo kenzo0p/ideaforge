@@ -1,0 +1,306 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import {
+  Bell,
+  Compass,
+  FileText,
+  LayoutDashboard,
+  LogIn,
+  LogOut,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Settings,
+  Sparkles,
+  UserPlus,
+  X,
+} from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
+import CommandPalette, { PALETTE_EVENT } from "@/components/CommandPalette";
+import UsageMeter from "@/components/UsageMeter";
+import { signOutAction } from "@/lib/auth/actions";
+
+interface AppUser {
+  email: string;
+}
+
+interface RecentProject {
+  id: string;
+  title: string;
+}
+
+const NAV = [
+  { href: "/", label: "New idea", icon: Compass, authOnly: false },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, authOnly: true },
+  { href: "/notifications", label: "Notifications", icon: Bell, authOnly: true },
+  { href: "/settings", label: "Settings", icon: Settings, authOnly: true },
+];
+
+export default function AppShell({
+  user,
+  projects = [],
+  unreadCount = 0,
+  children,
+}: {
+  user: AppUser | null;
+  projects?: RecentProject[];
+  unreadCount?: number;
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const recentProjects = projects.slice(0, 6);
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => setOpen(false), [pathname]);
+
+  // Restore the collapsed preference.
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("sidebar-collapsed") === "1");
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem("sidebar-collapsed", next ? "1" : "0");
+      return next;
+    });
+  }
+
+  /** `mini` renders the icon-only rail (desktop collapsed state). */
+  const sidebarContent = (mini: boolean) => (
+    <div className="flex h-full flex-col gap-1 p-3">
+      <div className={`mb-4 flex items-center ${mini ? "justify-center" : "justify-between"}`}>
+        <Link href="/" className="flex items-center gap-2 px-1 py-1.5" title="IdeaForge">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand to-brand-2 text-white">
+            <Sparkles className="size-4" />
+          </span>
+          {!mini && <span className="text-lg font-bold">IdeaForge</span>}
+        </Link>
+        {!mini && (
+          <button
+            onClick={toggleCollapsed}
+            title="Collapse sidebar"
+            className="hidden rounded-lg p-1.5 text-muted transition hover:bg-background hover:text-foreground lg:block"
+          >
+            <PanelLeftClose className="size-4" />
+          </button>
+        )}
+      </div>
+
+      {mini && (
+        <button
+          onClick={toggleCollapsed}
+          title="Expand sidebar"
+          className="mb-1 flex justify-center rounded-lg p-2 text-muted transition hover:bg-background hover:text-foreground"
+        >
+          <PanelLeftOpen className="size-4" />
+        </button>
+      )}
+
+      {/* Command palette trigger */}
+      <button
+        onClick={() => window.dispatchEvent(new Event(PALETTE_EVENT))}
+        title="Search (⌘K)"
+        className={`mb-2 flex items-center gap-2 rounded-lg border border-border bg-background text-sm text-muted transition hover:border-brand/40 hover:text-foreground ${
+          mini ? "justify-center px-2 py-2" : "w-full px-3 py-2"
+        }`}
+      >
+        <Search className="size-4 shrink-0" />
+        {!mini && (
+          <>
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="rounded border border-border px-1 py-0.5 text-[10px]">⌘K</kbd>
+          </>
+        )}
+      </button>
+
+      <nav className="flex flex-col gap-0.5">
+        {NAV.filter((n) => !n.authOnly || user).map((n) => {
+          const active = pathname === n.href;
+          const showBadge = n.href === "/notifications" && unreadCount > 0;
+          return (
+            <Link
+              key={n.href}
+              href={n.href}
+              title={n.label}
+              className={`relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                mini ? "justify-center" : ""
+              } ${
+                active
+                  ? "bg-brand/10 text-brand"
+                  : "text-muted hover:bg-background hover:text-foreground"
+              }`}
+            >
+              <span className="relative shrink-0">
+                <n.icon className="size-4" />
+                {showBadge && mini && (
+                  <span className="absolute -right-1 -top-1 size-2 rounded-full bg-brand" />
+                )}
+              </span>
+              {!mini && (
+                <>
+                  <span className="flex-1">{n.label}</span>
+                  {showBadge && (
+                    <span className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Recent projects — quick nav (hidden on the mini rail) */}
+      {user && !mini && recentProjects.length > 0 && (
+        <div className="mt-4 overflow-y-auto">
+          <div className="mb-1 flex items-center justify-between px-3">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+              Recent
+            </span>
+            <Link href="/dashboard" className="text-[10px] text-muted hover:text-foreground">
+              All
+            </Link>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {recentProjects.map((p) => {
+              const active = pathname === `/projects/${p.id}`;
+              return (
+                <Link
+                  key={p.id}
+                  href={`/projects/${p.id}`}
+                  title={p.title}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition ${
+                    active
+                      ? "bg-brand/10 text-brand"
+                      : "text-muted hover:bg-background hover:text-foreground"
+                  }`}
+                >
+                  <FileText className="size-3.5 shrink-0" />
+                  <span className="truncate">{p.title}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-auto flex flex-col gap-1 border-t border-border pt-2">
+        {user && !mini && <UsageMeter />}
+        <ThemeToggle collapsed={mini} />
+        {user ? (
+          mini ? (
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                title={`Sign out (${user.email})`}
+                className="flex w-full justify-center rounded-lg p-2 text-muted transition hover:bg-background hover:text-rose-500"
+              >
+                <LogOut className="size-4" />
+              </button>
+            </form>
+          ) : (
+            <div className="rounded-lg px-3 py-2">
+              <p className="truncate text-xs text-muted" title={user.email}>
+                {user.email}
+              </p>
+              <form action={signOutAction}>
+                <button
+                  type="submit"
+                  className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-muted transition hover:text-rose-500"
+                >
+                  <LogOut className="size-4" /> Sign out
+                </button>
+              </form>
+            </div>
+          )
+        ) : (
+          <div className="flex flex-col gap-1">
+            <Link
+              href="/sign-in"
+              title="Sign in"
+              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:bg-background hover:text-foreground ${
+                mini ? "justify-center" : ""
+              }`}
+            >
+              <LogIn className="size-4 shrink-0" />
+              {!mini && "Sign in"}
+            </Link>
+            <Link
+              href="/sign-up"
+              title="Sign up"
+              className={`flex items-center justify-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90`}
+            >
+              <UserPlus className="size-4 shrink-0" />
+              {!mini && "Sign up"}
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const railWidth = collapsed ? "w-16" : "w-60";
+  const contentPad = collapsed ? "lg:pl-16" : "lg:pl-60";
+
+  return (
+    <div className="min-h-full">
+      {/* Desktop sidebar */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 hidden border-r border-border bg-sidebar transition-all duration-200 lg:block ${railWidth}`}
+      >
+        {sidebarContent(collapsed)}
+      </aside>
+
+      {/* Mobile top bar */}
+      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-sidebar/90 px-4 py-3 backdrop-blur lg:hidden">
+        <Link href="/" className="flex items-center gap-2 font-bold">
+          <span className="flex size-6 items-center justify-center rounded-md bg-gradient-to-br from-brand to-brand-2 text-white">
+            <Sparkles className="size-3.5" />
+          </span>
+          IdeaForge
+        </Link>
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Open menu"
+          className="relative rounded-lg p-1.5 text-muted hover:text-foreground"
+        >
+          <Menu className="size-5" />
+          {unreadCount > 0 && (
+            <span className="absolute right-1 top-1 size-2 rounded-full bg-brand" />
+          )}
+        </button>
+      </div>
+
+      {/* Mobile drawer */}
+      {open && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 w-64 border-r border-border bg-sidebar">
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Close menu"
+              className="absolute right-3 top-3 rounded-lg p-1.5 text-muted hover:text-foreground"
+            >
+              <X className="size-5" />
+            </button>
+            {sidebarContent(false)}
+          </aside>
+        </div>
+      )}
+
+      {/* Main content */}
+      <div className={`${contentPad} transition-all duration-200`}>{children}</div>
+
+      {/* ⌘K command palette (global) */}
+      {user && <CommandPalette projects={projects} />}
+    </div>
+  );
+}

@@ -7,8 +7,9 @@
 // these shapes, never on how they were produced.
 // ---------------------------------------------------------------------------
 
-/** The eight Layer 2 capabilities from the track brief. */
+/** The Layer 2 capabilities from the track brief, plus problem discovery. */
 export type Layer2Capability =
+  | "problem-discovery"
   | "deep-search"
   | "project-hub"
   | "ai-agents"
@@ -67,6 +68,34 @@ export interface ProblemValidation {
 export interface IdeaInput {
   idea: string;
   /** BCP-47 tag for multilingual output; defaults to "en". */
+  locale?: string;
+}
+
+// --- Problem Discovery -----------------------------------------------------
+
+/** A real-world problem worth solving, surfaced from current signals. */
+export interface DiscoveredProblem {
+  title: string;
+  description: string;
+  whoIsAffected: string;
+  whyNow: string;
+  signals: string[];
+  /** A concrete one-line idea that feeds straight into validation. */
+  starterIdea: string;
+  citations?: number[];
+}
+
+export interface ProblemDiscovery {
+  /** The domain explored (or "general"). */
+  domain: string;
+  problems: DiscoveredProblem[];
+  sources: Citation[];
+  demo: boolean;
+}
+
+export interface DiscoverInput {
+  /** Domain / interest to explore, e.g. "education", "rural healthcare". */
+  domain?: string;
   locale?: string;
 }
 

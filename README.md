@@ -42,10 +42,19 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
 - **`lib/search`** — a `SearchProvider` interface powering DeepSearch. **Tavily** for live web
   results, **Mock** for offline demos (clearly labeled in the UI).
 - **`lib/insights`** — `Layer2Service` is the single seam the copilot's features call. Swapping
-  in the real iNSIGHTS Layer 2 API later means editing only `layer2.ts`.
+  in the real iNSIGHTS Layer 2 API later means editing only `layer2.ts`. Covers **problem
+  discovery** (find real problems worth solving in a domain, grounded in live web signals),
+  validation, DeepSearch, Project HUB, and knowledge clustering.
+- **`lib/email`** — swappable mailer (console dev / Resend prod) powering email verification,
+  with a graceful fallback link when a real send can't be delivered.
 - **`lib/db`** — SQLite persistence via Node's built-in **`node:sqlite`** (zero dependencies,
   zero native build). Projects + Research Workspace items; mutations go through Server Actions
   in `lib/actions.ts`. DB file lives at `data/ideaforge.db` (git-ignored).
+- **`lib/auth`** — email + password authentication with **no external library**: passwords
+  hashed with Node's `crypto.scrypt` (salted), opaque session tokens in an HttpOnly cookie
+  backed by a `sessions` table. `getCurrentUser()` gates server components/actions; every
+  project is scoped to its owner (`user_id`), so `getProject`/`listProjects` enforce
+  authorization at the query level. Guests can use the copilot but must sign in to save.
 - **`lib/agents`** — one channel-agnostic `handleAgentMessage()` brain powering both the in-app
   **Agent Console** (`/api/agents/message`) and a **Telegram webhook** (`/api/agents/telegram`).
   Commands (`/status`, `/next`, `/plan`, `/projects`) run locally; free-text is answered by the

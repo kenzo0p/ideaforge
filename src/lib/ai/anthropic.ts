@@ -33,7 +33,11 @@ export class AnthropicProvider implements AIProvider {
         model: this.model,
         stream: true,
         max_tokens: options.maxTokens ?? 2048,
-        temperature: options.temperature ?? 0.4,
+        // `temperature` is deprecated/rejected on newer models (e.g. Sonnet 5);
+        // only send it when explicitly opted in via ANTHROPIC_SEND_TEMPERATURE.
+        ...(process.env.ANTHROPIC_SEND_TEMPERATURE && options.temperature !== undefined
+          ? { temperature: options.temperature }
+          : {}),
         ...(system ? { system } : {}),
         messages,
       }),

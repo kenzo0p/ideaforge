@@ -1,4 +1,6 @@
 import { handleAgentMessage } from "@/lib/agents/handler";
+import { getCurrentUser } from "@/lib/auth/session";
+import { enforceRateLimit } from "@/lib/auth/api";
 
 export const runtime = "nodejs";
 
@@ -16,9 +18,15 @@ export async function POST(req: Request) {
   if (!text) return Response.json({ error: "Say something to the agent." }, { status: 400 });
   if (text.length > 1000) return Response.json({ error: "Message too long." }, { status: 400 });
 
+  const user = await getCurrentUser();
+  if (!user) return Response.json({ error: "Please sign in to use the agent." }, { status: 401 });
+  const limited = enforceRateLimit(user.id, "agent");
+  if (limited) return limited;
+
   try {
     const reply = await handleAgentMessage({
       text,
+      userId: user.id,
       projectId: body.projectId ?? null,
       channel: "console",
       locale: body.locale,

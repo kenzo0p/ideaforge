@@ -31,6 +31,31 @@ citations (real research comes in a later step). Respond in locale "${locale}".`
   ];
 }
 
+// Filler words to drop when extracting domain keywords for resource APIs
+// (GitHub/Kaggle/CORE), which return far better results for short noun queries.
+const KEYWORD_STOP = new Set([
+  "build", "create", "make", "design", "develop", "use", "using", "used",
+  "a", "an", "the", "to", "in", "of", "for", "and", "or", "with", "that",
+  "into", "from", "on", "your", "my", "it", "via", "app", "application",
+  "tool", "solution", "system", "platform", "ai", "ml", "based", "detect",
+  "detects", "reduce", "reduces", "turns", "turn", "help", "helps", "smart",
+]);
+
+/**
+ * Extract domain keywords from an idea for resource search. Drops filler/tech
+ * verbs so what remains is the salient noun phrase, e.g.
+ * "Build an AI solution to reduce food waste in college hostels" →
+ * "food waste college hostels".
+ */
+export function keywordsFor(idea: string): string {
+  const words = idea
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && !KEYWORD_STOP.has(w));
+  return words.slice(0, 5).join(" ") || deriveTopic(idea);
+}
+
 /** Strip filler verbs / trailing punctuation to get a compact search topic. */
 export function deriveTopic(idea: string): string {
   return idea
@@ -75,7 +100,7 @@ refer to the sources. Never invent sources, URLs, or statistics not present.
 
 Return a STRICT JSON object (no markdown fences) with this shape:
 {
-  "summaryMarkdown": "3–5 short paragraphs of markdown with [n] citation markers covering the state of the art, what's known, and market/literature context",
+  "summaryMarkdown": "2–3 SHORT paragraphs (≤90 words each) of markdown with [n] citation markers covering the state of the art, what's known, and market/literature context — be concise",
   "existingSolutions": [
     { "name": "...", "what": "one line", "strengths": ["..."], "gaps": ["where it falls short"], "citations": [1] }
   ],
@@ -89,6 +114,59 @@ Provide 2–4 existingSolutions and 2–4 gaps. Respond in locale "${locale}".`,
       role: "user",
       content: `IDEA: ${idea}\n\nSOURCES:\n${context}`,
     },
+  ];
+}
+
+/** Searches used to ground problem discovery in current, real-world signals. */
+export function problemDiscoveryQueries(domain: string): string[] {
+  const d = domain.trim() || "students and everyday life";
+  return [
+    `biggest unsolved problems and pain points in ${d} 2025`,
+    `emerging challenges and unmet needs in ${d}`,
+    `${d} frustrations people complain about`,
+  ];
+}
+
+/**
+ * Problem-discovery synthesis. Grounds a set of concrete, worth-solving problems
+ * in the numbered SOURCES, each with a starter idea that feeds validation.
+ */
+export function problemDiscoveryMessages(
+  domain: string,
+  results: SearchResult[],
+  locale = "en",
+): ChatMessage[] {
+  const context = results
+    .map((r, i) => `[${i + 1}] ${r.title} — ${r.source}\n${r.content}`)
+    .join("\n\n");
+  const scope = domain.trim() || "students and everyday life";
+
+  return [
+    {
+      role: "system",
+      content: `[[TASK:problem-discovery]]
+You are iNSIGHTS Problem Discovery. Using the numbered SOURCES as evidence,
+surface concrete, real-world problems worth solving in the area of "${scope}".
+Favor specific, felt pains over vague themes. Ground claims in [n] markers where
+the sources support them; never invent statistics.
+
+Return a STRICT JSON object (no markdown fences) with this shape:
+{
+  "problems": [
+    {
+      "title": "the problem in one sharp line",
+      "description": "1–2 sentences on the problem",
+      "whoIsAffected": "who feels this pain",
+      "whyNow": "the trend making it urgent",
+      "signals": ["evidence it's real (from sources)"],
+      "starterIdea": "a concrete one-line project idea to solve it",
+      "citations": [1]
+    }
+  ]
+}
+Provide 4–6 distinct problems. Respond in locale "${locale}".`,
+    },
+    { role: "user", content: `DOMAIN: ${scope}\n\nSOURCES:\n${context}` },
   ];
 }
 

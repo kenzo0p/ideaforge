@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import {
   Boxes,
+  Check,
   Database,
   ExternalLink,
   FileText,
@@ -11,15 +13,31 @@ import {
   Plug,
   Rocket,
 } from "lucide-react";
+import { toggleMilestoneAction } from "@/lib/actions";
 import type { ProjectPlan, Resource } from "@/lib/insights/types";
 
 export default function ProjectPlanPanel({
   plan,
   provider,
+  projectId,
+  completedMilestones = [],
 }: {
   plan: ProjectPlan;
   provider: string | null;
+  /** When set, milestones become checkable and progress is persisted. */
+  projectId?: string;
+  completedMilestones?: number[];
 }) {
+  const [done, setDone] = useState<number[]>(completedMilestones);
+  const [pending, startTransition] = useTransition();
+
+  function toggle(idx: number, next: boolean) {
+    if (!projectId) return;
+    // Optimistic: reflect immediately, then persist.
+    setDone((prev) => (next ? [...prev, idx] : prev.filter((i) => i !== idx)));
+    startTransition(() => toggleMilestoneAction(projectId, idx, next));
+  }
+
   return (
     <div className="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
       {/* Header */}
@@ -97,12 +115,47 @@ export default function ProjectPlanPanel({
       {/* Timeline / milestones */}
       {plan.milestones.length > 0 && (
         <Section icon={<MilestoneIcon className="size-4 text-brand" />} title="Roadmap & timeline">
+          {/* Progress summary — only for saved projects (tracking needs an id). */}
+          {projectId && plan.milestones.length > 0 && (
+            <div className="mb-4 flex items-center gap-3">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-border">
+                <div
+                  className="h-full rounded-full bg-brand transition-all"
+                  style={{ width: `${Math.round((done.length / plan.milestones.length) * 100)}%` }}
+                />
+              </div>
+              <span className="shrink-0 text-xs text-muted">
+                {done.length}/{plan.milestones.length} done
+              </span>
+            </div>
+          )}
           <ol className="relative space-y-4 border-l border-border pl-5">
-            {plan.milestones.map((m, i) => (
+            {plan.milestones.map((m, i) => {
+              const isDone = done.includes(i);
+              return (
               <li key={i} className="relative">
-                <span className="absolute -left-[27px] top-1 size-3 rounded-full border-2 border-brand bg-card" />
-                <div className="text-sm font-semibold text-brand">{m.phase}</div>
-                <div className="text-sm">{m.goal}</div>
+                {projectId ? (
+                  <button
+                    onClick={() => toggle(i, !isDone)}
+                    disabled={pending}
+                    aria-label={isDone ? "Mark incomplete" : "Mark complete"}
+                    className={`absolute -left-[31px] top-0.5 flex size-5 items-center justify-center rounded-full border-2 transition ${
+                      isDone
+                        ? "border-emerald-500 bg-emerald-500 text-white"
+                        : "border-brand bg-card hover:bg-brand/10"
+                    }`}
+                  >
+                    {isDone && <Check className="size-3" />}
+                  </button>
+                ) : (
+                  <span className="absolute -left-[27px] top-1 size-3 rounded-full border-2 border-brand bg-card" />
+                )}
+                <div
+                  className={`text-sm font-semibold ${isDone ? "text-muted line-through" : "text-brand"}`}
+                >
+                  {m.phase}
+                </div>
+                <div className={`text-sm ${isDone ? "text-muted" : ""}`}>{m.goal}</div>
                 <ul className="mt-1 flex flex-wrap gap-1.5">
                   {m.tasks.map((task, j) => (
                     <li
@@ -118,7 +171,8 @@ export default function ProjectPlanPanel({
                   {m.deliverable}
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ol>
         </Section>
       )}

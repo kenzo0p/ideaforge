@@ -79,6 +79,10 @@ function render(task: string, rawUser: string): string {
     }
     case "agent-reply":
       return agentReply(rawUser.trim());
+    case "problem-discovery": {
+      const domainLine = rawUser.match(/DOMAIN:\s*(.+)/i)?.[1] ?? "students";
+      return problemDiscovery(domainLine.trim());
+    }
     default:
       return `## Analysis\n\nHere is an analysis of **${subjectOf(rawUser)}**. (Demo provider — add an \`OPENAI_API_KEY\` or \`ANTHROPIC_API_KEY\` to \`.env.local\` for live model output.)`;
   }
@@ -129,6 +133,52 @@ function deepResearch(subject: string): string {
         title: "Fragmented workflow",
         description: "Users stitch together many tools to go from idea to build.",
         opportunity: "Unify discovery → research → planning in one guided flow.",
+      },
+    ],
+  };
+  return JSON.stringify(payload);
+}
+
+/** Demo problem discovery as strict JSON, themed to the domain. */
+function problemDiscovery(domain: string): string {
+  const d = domain || "everyday life";
+  const payload = {
+    problems: [
+      {
+        title: `Fragmented information makes ${d} harder than it should be`,
+        description: `People in ${d} waste hours stitching together scattered, outdated, or conflicting information.`,
+        whoIsAffected: `Students and early practitioners in ${d}`,
+        whyNow: "Content volume is exploding faster than anyone can curate it.",
+        signals: ["Recurring forum complaints [1]", "Growth in 'how do I' searches [2]"],
+        starterIdea: `Build an AI copilot that consolidates trusted ${d} knowledge into one guided workflow.`,
+        citations: [1, 2],
+      },
+      {
+        title: `High cost of getting started in ${d}`,
+        description: `Upfront cost and complexity keep motivated beginners from taking the first step.`,
+        whoIsAffected: `First-time and under-resourced learners in ${d}`,
+        whyNow: "Expectations are rising while budgets shrink.",
+        signals: ["Reports of drop-off at onboarding [3]"],
+        starterIdea: `Create a zero-setup, guided starter that removes the first-hour friction in ${d}.`,
+        citations: [3],
+      },
+      {
+        title: `No trustworthy way to validate decisions in ${d}`,
+        description: `People can't tell which advice to trust, so they hesitate or make avoidable mistakes.`,
+        whoIsAffected: `Anyone making consequential choices in ${d}`,
+        whyNow: "AI-generated content has flooded the space with unverified claims.",
+        signals: ["Rising demand for cited, checkable sources [4]"],
+        starterIdea: `Build a decision assistant for ${d} that grounds every recommendation in verifiable evidence.`,
+        citations: [4],
+      },
+      {
+        title: `Progress in ${d} stalls without accountability`,
+        description: `Solo learners and builders lose momentum with no nudges or tracking.`,
+        whoIsAffected: `Self-directed people pursuing goals in ${d}`,
+        whyNow: "Remote/self-paced work has made accountability scarce.",
+        signals: ["High abandonment of self-paced programs [5]"],
+        starterIdea: `Make an agent that tracks progress and sends timely nudges for goals in ${d}.`,
+        citations: [5],
       },
     ],
   };

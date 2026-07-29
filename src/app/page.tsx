@@ -1,9 +1,15 @@
 import IdeaConsole from "@/components/IdeaConsole";
+import SignInGate from "@/components/SignInGate";
 import { CAPABILITIES } from "@/lib/insights/capabilities";
 import { getLayer2 } from "@/lib/insights/layer2";
+import { getProvider } from "@/lib/ai";
+import { getCurrentUser } from "@/lib/auth/session";
 
-export default function Home() {
+export default async function Home() {
   const live = getLayer2().capabilities;
+  const user = await getCurrentUser();
+  const isAuthed = !!user;
+  const isDemo = getProvider().isMock;
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:py-16">
@@ -26,8 +32,23 @@ export default function Home() {
         </p>
       </header>
 
-      {/* Console */}
-      <IdeaConsole />
+      {/* Demo-mode banner — honest signal that no LLM is connected yet. */}
+      {isAuthed && isDemo && (
+        <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
+          <span className="font-semibold">⚠️ Demo mode —</span> no language model is connected, so
+          analysis, plans, and clusters are <strong>generic templates, not tailored to your idea</strong>.
+          Web search, GitHub, datasets, and papers are live. Add an{" "}
+          <code className="rounded bg-amber-500/20 px-1">OPENAI_API_KEY</code> or{" "}
+          <code className="rounded bg-amber-500/20 px-1">ANTHROPIC_API_KEY</code> to go fully live.
+        </div>
+      )}
+
+      {/* Console — gated behind auth */}
+      {isAuthed ? (
+        <IdeaConsole isAuthed defaultLocale={user?.locale ?? "en"} />
+      ) : (
+        <SignInGate />
+      )}
 
       {/* Capability roadmap */}
       <section className="mt-14">
@@ -37,17 +58,20 @@ export default function Home() {
         <p className="mb-5 text-sm text-muted">
           Problem validation is live. Here&apos;s the full copilot taking shape.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {CAPABILITIES.map((cap) => {
             const isLive = live[cap.id];
+            const Icon = cap.icon;
             return (
               <div
                 key={cap.id}
                 className="rounded-xl border border-border bg-card p-4 transition hover:border-brand/40"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2 font-semibold">
-                    <span className="text-lg">{cap.icon}</span>
+                  <div className="flex items-center gap-2.5 font-semibold">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+                      <Icon className="size-4" />
+                    </span>
                     {cap.title}
                   </div>
                   <span

@@ -1,11 +1,17 @@
 import { getProvider } from "@/lib/ai";
 import { getLayer2 } from "@/lib/insights/layer2";
+import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 
 export const runtime = "nodejs";
 
 // POST /api/analyze — streams a problem validation for the given idea as plain
 // text (the client appends chunks directly). Part 1 vertical slice.
 export async function POST(req: Request) {
+  const auth = await requireApiUser();
+  if (auth instanceof Response) return auth;
+  const limited = enforceRateLimit(auth.id, "copilot");
+  if (limited) return limited;
+
   let body: { idea?: string; locale?: string };
   try {
     body = await req.json();
