@@ -28,9 +28,13 @@ export const metadata: Metadata = {
  * present in the very first byte of HTML — no flash and no blocking script.
  * When it's absent, CSS falls back to the OS `prefers-color-scheme`.
  */
-async function themeClass(): Promise<string> {
-  const theme = (await cookies()).get("theme")?.value;
-  return theme === "dark" || theme === "light" ? theme : "";
+async function readPrefs(): Promise<{ theme: "light" | "dark" | ""; collapsed: boolean }> {
+  const jar = await cookies();
+  const theme = jar.get("theme")?.value;
+  return {
+    theme: theme === "dark" || theme === "light" ? theme : "",
+    collapsed: jar.get("sidebar")?.value === "collapsed",
+  };
 }
 
 export default async function RootLayout({
@@ -46,7 +50,7 @@ export default async function RootLayout({
         .map((p) => ({ id: p.id, title: p.title }))
     : [];
   const unread = user ? unreadNotificationCount(user.id, user.notificationsSeenAt) : 0;
-  const theme = await themeClass();
+  const { theme, collapsed } = await readPrefs();
 
   return (
     <html
@@ -58,6 +62,8 @@ export default async function RootLayout({
           user={user ? { email: user.email } : null}
           projects={projects}
           unreadCount={unread}
+          initialTheme={theme || "system"}
+          initialCollapsed={collapsed}
         >
           {children}
         </AppShell>

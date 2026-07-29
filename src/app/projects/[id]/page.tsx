@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import ExportMenu from "@/components/ExportMenu";
+import ProjectTabBar, { type ProjectTabKey } from "@/components/ProjectTabBar";
 import MarkdownView from "@/components/MarkdownView";
 import ResearchPanel from "@/components/ResearchPanel";
 import ProjectPlanPanel from "@/components/ProjectPlanPanel";
@@ -19,12 +20,25 @@ import { timeAgo } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+const TAB_KEYS: ProjectTabKey[] = ["validation", "research", "plan", "workspace", "collaborate"];
+
+export default async function ProjectPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { id } = await params;
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
   const project = getProject(id, user.id);
   if (!project) notFound();
+
+  // ?tab=… drives which section renders; the sidebar and tab bar both link here.
+  const requested = (await searchParams).tab as ProjectTabKey | undefined;
+  const activeTab: ProjectTabKey =
+    requested && TAB_KEYS.includes(requested) ? requested : "validation";
 
   const items = listWorkspaceItems(id);
   const telegramConfigured = isTelegramConfigured();
@@ -51,53 +65,75 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         <ExportMenu projectId={project.id} />
       </header>
 
-      <div className="space-y-5">
-        {/* Saved Problem Validation */}
-        {project.validationMarkdown && (
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2 border-b border-border pb-3 text-sm font-semibold">
-              <Sparkles className="size-4 text-brand" />
-              Problem Validation
+      <ProjectTabBar
+        projectId={project.id}
+        active={activeTab}
+        ready={{
+          validation: !!project.validationMarkdown,
+          research: !!project.research,
+          plan: !!project.plan,
+        }}
+      />
+
+      <div className="mt-4 space-y-5">
+        {activeTab === "validation" &&
+          (project.validationMarkdown ? (
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2 border-b border-border pb-3 text-sm font-semibold">
+                <Sparkles className="size-4 text-brand" />
+                Problem Validation
+              </div>
+              <MarkdownView>{project.validationMarkdown}</MarkdownView>
             </div>
-            <MarkdownView>{project.validationMarkdown}</MarkdownView>
-          </div>
-        )}
+          ) : (
+            <EmptySection label="No validation saved for this project." />
+          ))}
 
-        {/* Saved DeepSearch */}
-        {project.research && <ResearchPanel report={project.research} searchProvider="Saved" />}
+        {activeTab === "research" &&
+          (project.research ? (
+            <ResearchPanel report={project.research} searchProvider="Saved" />
+          ) : (
+            <EmptySection label="No research saved for this project." />
+          ))}
 
-        {/* Saved Project HUB plan */}
-        {project.plan && (
-          <ProjectPlanPanel
-            plan={project.plan}
-            provider="Saved"
-            projectId={project.id}
-            completedMilestones={completedMilestones}
-          />
-        )}
-
-        {/* Public sharing */}
-        <ShareProject projectId={project.id} initialToken={project.shareToken} />
-
-        {/* AI Agent */}
-        <AgentConsole projectId={project.id} />
-
-        {/* Telegram + reminders */}
-        {telegramConfigured && (
-          <>
-            <ConnectTelegram linked={telegramLinked} />
-            <ProjectReminders
+        {activeTab === "plan" &&
+          (project.plan ? (
+            <ProjectPlanPanel
+              plan={project.plan}
+              provider="Saved"
               projectId={project.id}
-              telegramLinked={telegramLinked}
-              reminders={reminders}
-              history={reminderHistory}
+              completedMilestones={completedMilestones}
             />
+          ) : (
+            <EmptySection label="No plan saved for this project." />
+          ))}
+
+        {activeTab === "workspace" && <Workspace projectId={project.id} items={items} />}
+
+        {activeTab === "collaborate" && (
+          <>
+            <ShareProject projectId={project.id} initialToken={project.shareToken} />
+            <AgentConsole projectId={project.id} />
+            {telegramConfigured && <ConnectTelegram linked={telegramLinked} />}
+            {telegramConfigured && (
+              <ProjectReminders
+                projectId={project.id}
+                telegramLinked={telegramLinked}
+                reminders={reminders}
+                history={reminderHistory}
+              />
+            )}
           </>
         )}
-
-        {/* Research Workspace */}
-        <Workspace projectId={project.id} items={items} />
       </div>
     </main>
+  );
+}
+
+function EmptySection({ label }: { label: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-border bg-card/50 p-10 text-center text-sm text-muted">
+      {label}
+    </div>
   );
 }

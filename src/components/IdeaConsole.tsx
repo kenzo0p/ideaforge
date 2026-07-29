@@ -4,10 +4,23 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowUp, Bookmark, Check, Compass, Languages, Lightbulb, Loader2, Rocket, Search, Sparkles, Square } from "lucide-react";
+import {
+  ArrowUp,
+  Bookmark,
+  Check,
+  Languages,
+  Lightbulb,
+  Loader2,
+  Rocket,
+  Search,
+  Sparkles,
+  Square,
+  type LucideIcon,
+} from "lucide-react";
 import ResearchPanel from "@/components/ResearchPanel";
 import ProjectPlanPanel from "@/components/ProjectPlanPanel";
 import DiscoverPanel from "@/components/DiscoverPanel";
+import ResultTabs from "@/components/ResultTabs";
 import { USAGE_EVENT } from "@/components/UsageMeter";
 import { saveProjectAction } from "@/lib/actions";
 import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
@@ -26,13 +39,17 @@ const LANGUAGES: Array<{ code: string; label: string }> = [
 
 type Status = "idle" | "streaming" | "done" | "error";
 type ResearchStatus = "idle" | "loading" | "done" | "error";
+type ResultTab = "validation" | "research" | "plan";
 
 export default function IdeaConsole({
   isAuthed = false,
   defaultLocale = "en",
+  initialMode = "idea",
 }: {
   isAuthed?: boolean;
   defaultLocale?: string;
+  /** "discover" opens straight into problem discovery (via /?mode=discover). */
+  initialMode?: "idea" | "discover";
 }) {
   const [idea, setIdea] = useState("");
   const [analyzedIdea, setAnalyzedIdea] = useState("");
@@ -40,7 +57,8 @@ export default function IdeaConsole({
   const [status, setStatus] = useState<Status>("idle");
   const [provider, setProvider] = useState<string | null>(null);
   const [locale, setLocale] = useState(defaultLocale);
-  const [mode, setMode] = useState<"idea" | "discover">("idea");
+  const [mode, setMode] = useState<"idea" | "discover">(initialMode);
+  const [tab, setTab] = useState<ResultTab>("validation");
   const abortRef = useRef<AbortController | null>(null);
 
   // DeepSearch (Part 2)
@@ -76,6 +94,7 @@ export default function IdeaConsole({
     setPlan(null);
     setPlanError(null);
     setSavedId(null);
+    setTab("validation"); // a new idea starts back at step one
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -128,6 +147,7 @@ export default function IdeaConsole({
     if (!analyzedIdea || research === "loading") return;
     setResearch("loading");
     setResearchError(null);
+    setTab("research"); // follow the user to the step they just started
     try {
       const res = await fetch("/api/research", {
         method: "POST",
@@ -158,6 +178,7 @@ export default function IdeaConsole({
     if (!analyzedIdea || planStatus === "loading") return;
     setPlanStatus("loading");
     setPlanError(null);
+    setTab("plan");
     try {
       const res = await fetch("/api/plan", {
         method: "POST",
@@ -301,16 +322,18 @@ export default function IdeaConsole({
         </div>
       </form>
 
-      {/* Result */}
+      {/* Results — one step per tab instead of one long stacked page */}
       {(output || streaming) && (
-        <div className="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between border-b border-border pb-3">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="size-4 text-brand" />
-              Problem Validation
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted">
-              {status === "done" && savedId && (
+        <div className="mt-5 space-y-4">
+          {/* Toolbar: save/open stay visible across every tab */}
+          {status === "done" && (
+            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
+              {provider && (
+                <span className="mr-auto rounded-full border border-border px-2 py-0.5 text-muted">
+                  {provider}
+                </span>
+              )}
+              {savedId && (
                 <button
                   onClick={() => router.push(`/projects/${savedId}`)}
                   className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-500"
@@ -318,97 +341,172 @@ export default function IdeaConsole({
                   <Check className="size-3.5" /> Open project
                 </button>
               )}
-              {status === "done" && (
-                <button
-                  onClick={saveProject}
-                  disabled={saving}
-                  className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 font-medium text-foreground transition hover:border-brand/50 disabled:opacity-50"
-                >
-                  {saving ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Bookmark className="size-3.5" />
-                  )}
-                  {!isAuthed ? "Sign in to save" : savedId ? "Update" : "Save to dashboard"}
-                </button>
-              )}
-              {streaming && <Loader2 className="size-3.5 animate-spin" />}
-              {provider && (
-                <span className="rounded-full border border-border px-2 py-0.5">{provider}</span>
-              )}
-            </div>
-          </div>
-          <div className={`prose-insights text-[15px] ${streaming ? "caret" : ""}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
-          </div>
-          {status === "done" && research === "idle" && (
-            <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-background/50 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted">
-                <span className="font-medium text-foreground">Next →</span> back this up with
-                real research from across the web.
-              </p>
               <button
-                onClick={runResearch}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+                onClick={saveProject}
+                disabled={saving}
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 font-medium text-foreground transition hover:border-brand/50 disabled:opacity-50"
               >
-                <Search className="size-4" /> Run DeepSearch
+                {saving ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Bookmark className="size-3.5" />
+                )}
+                {!isAuthed ? "Sign in to save" : savedId ? "Update" : "Save to dashboard"}
               </button>
             </div>
           )}
-        </div>
-      )}
 
-      {/* DeepSearch loading / error / result */}
-      {research === "loading" && (
-        <div className="mt-5 flex items-center gap-3 rounded-2xl border border-border bg-card p-5 text-sm text-muted shadow-sm">
-          <Loader2 className="size-4 animate-spin text-brand" />
-          Searching the web and synthesizing a citation-backed briefing…
-        </div>
-      )}
-      {research === "error" && (
-        <div className="mt-5 rounded-2xl border border-rose-500/40 bg-rose-500/5 p-5 text-sm text-rose-500 shadow-sm">
-          ⚠️ {researchError}
-          <button onClick={runResearch} className="ml-2 underline hover:no-underline">
-            Retry
-          </button>
-        </div>
-      )}
-      {research === "done" && report && (
-        <ResearchPanel report={report} searchProvider={searchProvider} />
-      )}
+          <ResultTabs
+            active={tab}
+            onChange={setTab}
+            tabs={[
+              {
+                key: "validation",
+                label: "Validation",
+                icon: Sparkles,
+                state: streaming ? "loading" : output ? "ready" : "empty",
+              },
+              {
+                key: "research",
+                label: "Research",
+                icon: Search,
+                state:
+                  research === "loading" ? "loading" : research === "done" ? "ready" : "empty",
+                locked: status !== "done",
+              },
+              {
+                key: "plan",
+                label: "Plan",
+                icon: Rocket,
+                state:
+                  planStatus === "loading" ? "loading" : planStatus === "done" ? "ready" : "empty",
+                locked: research !== "done",
+              },
+            ]}
+          />
 
-      {/* Project HUB CTA — appears after research (which enriches the plan) */}
-      {research === "done" && planStatus === "idle" && (
-        <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-background/50 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted">
-            <span className="font-medium text-foreground">Next →</span> turn all of this into a
-            full, buildable project plan.
-          </p>
-          <button
-            onClick={generatePlan}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
-          >
-            <Rocket className="size-4" /> Generate Project Plan
-          </button>
+          {/* --- Validation tab --- */}
+          {tab === "validation" && (
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <div className={`prose-insights text-[15px] ${streaming ? "caret" : ""}`}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
+              </div>
+              {status === "done" && research === "idle" && (
+                <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-background/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-muted">
+                    <span className="font-medium text-foreground">Next →</span> back this up with
+                    real research from across the web.
+                  </p>
+                  <button
+                    onClick={runResearch}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+                  >
+                    <Search className="size-4" /> Run DeepSearch
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* --- Research tab --- */}
+          {tab === "research" && (
+            <>
+              {research === "idle" && (
+                <EmptyStep
+                  title="No research yet"
+                  body="Search the live web and build a citation-backed briefing for this idea."
+                  actionLabel="Run DeepSearch"
+                  icon={Search}
+                  onAction={runResearch}
+                />
+              )}
+              {research === "loading" && (
+                <LoadingStep text="Searching the web and synthesizing a citation-backed briefing…" />
+              )}
+              {research === "error" && <ErrorStep message={researchError} onRetry={runResearch} />}
+              {research === "done" && report && (
+                <ResearchPanel report={report} searchProvider={searchProvider} />
+              )}
+            </>
+          )}
+
+          {/* --- Plan tab --- */}
+          {tab === "plan" && (
+            <>
+              {planStatus === "idle" && (
+                <EmptyStep
+                  title="No plan yet"
+                  body="Turn the validation and research into a full, buildable project plan."
+                  actionLabel="Generate Project Plan"
+                  icon={Rocket}
+                  onAction={generatePlan}
+                />
+              )}
+              {planStatus === "loading" && (
+                <LoadingStep text="Designing your architecture, roadmap, and resource recommendations…" />
+              )}
+              {planStatus === "error" && <ErrorStep message={planError} onRetry={generatePlan} />}
+              {planStatus === "done" && plan && (
+                <ProjectPlanPanel plan={plan} provider={planProvider} />
+              )}
+            </>
+          )}
         </div>
       )}
-      {planStatus === "loading" && (
-        <div className="mt-5 flex items-center gap-3 rounded-2xl border border-border bg-card p-5 text-sm text-muted shadow-sm">
-          <Loader2 className="size-4 animate-spin text-brand" />
-          Designing your architecture, roadmap, and resource recommendations…
-        </div>
-      )}
-      {planStatus === "error" && (
-        <div className="mt-5 rounded-2xl border border-rose-500/40 bg-rose-500/5 p-5 text-sm text-rose-500 shadow-sm">
-          ⚠️ {planError}
-          <button onClick={generatePlan} className="ml-2 underline hover:no-underline">
-            Retry
-          </button>
-        </div>
-      )}
-      {planStatus === "done" && plan && <ProjectPlanPanel plan={plan} provider={planProvider} />}
         </>
       )}
+    </div>
+  );
+}
+
+// --- Shared step states (used by the Research and Plan tabs) ----------------
+
+function EmptyStep({
+  title,
+  body,
+  actionLabel,
+  icon: Icon,
+  onAction,
+}: {
+  title: string;
+  body: string;
+  actionLabel: string;
+  icon: LucideIcon;
+  onAction: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-dashed border-border bg-card/50 p-10 text-center">
+      <span className="mx-auto mb-3 flex size-11 items-center justify-center rounded-xl bg-brand/10 text-brand">
+        <Icon className="size-5" />
+      </span>
+      <p className="font-semibold">{title}</p>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{body}</p>
+      <button
+        onClick={onAction}
+        className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+      >
+        <Icon className="size-4" /> {actionLabel}
+      </button>
+    </div>
+  );
+}
+
+function LoadingStep({ text }: { text: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-5 text-sm text-muted shadow-sm">
+      <Loader2 className="size-4 animate-spin text-brand" />
+      {text}
+    </div>
+  );
+}
+
+function ErrorStep({ message, onRetry }: { message: string | null; onRetry: () => void }) {
+  return (
+    <div className="rounded-2xl border border-rose-500/40 bg-rose-500/5 p-5 text-sm text-rose-500 shadow-sm">
+      ⚠️ {message}
+      <button onClick={onRetry} className="ml-2 underline hover:no-underline">
+        Retry
+      </button>
     </div>
   );
 }

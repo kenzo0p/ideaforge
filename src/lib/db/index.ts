@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // SQLite persistence (zero-config via Node's built-in node:sqlite)
@@ -9,7 +9,12 @@ import { dirname, resolve } from "node:path";
 // a single connection across dev/HMR reloads. Schema is created on first open.
 // ---------------------------------------------------------------------------
 
-const DB_PATH = resolve(process.env.IDEAFORGE_DB ?? "data/ideaforge.db");
+const DB_FILE = process.env.IDEAFORGE_DB ?? "data/ideaforge.db";
+// Scope the path explicitly under cwd; the ignore comment stops the bundler from
+// tracing the whole project just because this join is computed at runtime.
+const DB_PATH = isAbsolute(DB_FILE)
+  ? DB_FILE
+  : join(/* turbopackIgnore: true */ process.cwd(), DB_FILE);
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (

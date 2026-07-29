@@ -5,11 +5,17 @@ import { getLayer2 } from "@/lib/insights/layer2";
 import { getProvider } from "@/lib/ai";
 import { getCurrentUser } from "@/lib/auth/session";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ mode?: string }>;
+}) {
   const live = getLayer2().capabilities;
   const user = await getCurrentUser();
   const isAuthed = !!user;
   const isDemo = getProvider().isMock;
+  // `/?mode=discover` opens straight into problem discovery.
+  const initialMode = (await searchParams).mode === "discover" ? "discover" : "idea";
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:py-16">
@@ -45,7 +51,11 @@ export default async function Home() {
 
       {/* Console — gated behind auth */}
       {isAuthed ? (
-        <IdeaConsole isAuthed defaultLocale={user?.locale ?? "en"} />
+        <IdeaConsole
+          isAuthed
+          defaultLocale={user?.locale ?? "en"}
+          initialMode={initialMode}
+        />
       ) : (
         <SignInGate />
       )}

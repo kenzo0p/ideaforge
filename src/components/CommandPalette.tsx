@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -39,32 +39,35 @@ export default function CommandPalette({ projects }: { projects: PaletteProject[
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Global hotkey.
+  // Opening always starts from a clean slate (the input autofocuses on mount).
+  const openPalette = useCallback(() => {
+    setQuery("");
+    setIndex(0);
+    setOpen(true);
+  }, []);
+
+  // Global hotkey + programmatic open from the sidebar button.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((v) => !v);
+        setOpen((v) => {
+          if (v) return false;
+          setQuery("");
+          setIndex(0);
+          return true;
+        });
       } else if (e.key === "Escape") {
         setOpen(false);
       }
     };
-    const onOpen = () => setOpen(true);
     window.addEventListener("keydown", onKey);
-    window.addEventListener(PALETTE_EVENT, onOpen);
+    window.addEventListener(PALETTE_EVENT, openPalette);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener(PALETTE_EVENT, onOpen);
+      window.removeEventListener(PALETTE_EVENT, openPalette);
     };
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      setQuery("");
-      setIndex(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
+  }, [openPalette]);
 
   const commands = useMemo<Command[]>(() => {
     const go = (href: string) => () => {
@@ -130,8 +133,6 @@ export default function CommandPalette({ projects }: { projects: PaletteProject[
     });
   }, [commands, query]);
 
-  useEffect(() => setIndex(0), [query]);
-
   if (!open) return null;
 
   const groups: Array<Command["group"]> = ["Actions", "Projects"];
@@ -144,8 +145,12 @@ export default function CommandPalette({ projects }: { projects: PaletteProject[
           <Search className="size-4 shrink-0 text-muted" />
           <input
             ref={inputRef}
+            autoFocus
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setIndex(0); // keep the highlight on the top match
+            }}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
                 e.preventDefault();

@@ -36,7 +36,10 @@ export class OpenAIProvider implements AIProvider {
       throw new Error(`OpenAI request failed (${res.status}): ${detail}`);
     }
 
-    yield* parseSSE(res.body, (json) => json.choices?.[0]?.delta?.content ?? "");
+    yield* parseSSE(res.body, (json) => {
+      const chunk = json as { choices?: Array<{ delta?: { content?: string } }> };
+      return chunk.choices?.[0]?.delta?.content ?? "";
+    });
   }
 
   async generateText(options: GenerateOptions): Promise<string> {
@@ -49,7 +52,7 @@ export class OpenAIProvider implements AIProvider {
 /** Parse an SSE body into text deltas via a per-event extractor. */
 export async function* parseSSE(
   body: ReadableStream<Uint8Array>,
-  extract: (json: any) => string,
+  extract: (json: unknown) => string,
 ): AsyncIterable<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();

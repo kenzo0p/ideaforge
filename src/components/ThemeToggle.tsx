@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 
 type Theme = "light" | "dark" | "system";
@@ -10,14 +10,15 @@ type Theme = "light" | "dark" | "system";
  * can render the right class on <html> (no flash, no blocking script); the class
  * is also flipped here so the change is instant without a reload.
  */
-export default function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
-  const [theme, setTheme] = useState<Theme>("system");
-
-  // Reflect the cookie the server already used, so the label starts correct.
-  useEffect(() => {
-    const m = document.cookie.match(/(?:^|;\s*)theme=(light|dark)/);
-    setTheme((m?.[1] as Theme) ?? "system");
-  }, []);
+export default function ThemeToggle({
+  collapsed = false,
+  initialTheme = "system",
+}: {
+  collapsed?: boolean;
+  /** Server-read cookie value, so the label is correct on first paint. */
+  initialTheme?: Theme;
+}) {
+  const [theme, setTheme] = useState<Theme>(initialTheme);
 
   function apply(next: Theme) {
     const root = document.documentElement;

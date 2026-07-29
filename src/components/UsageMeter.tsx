@@ -27,10 +27,15 @@ export default function UsageMeter() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    // Subscribe to copilot activity, and take one reading on mount. The state
+    // update happens in the fetch callback, never synchronously in this body.
     const onEvent = () => void refresh();
     window.addEventListener(USAGE_EVENT, onEvent);
-    return () => window.removeEventListener(USAGE_EVENT, onEvent);
+    const initial = setTimeout(onEvent, 0);
+    return () => {
+      clearTimeout(initial);
+      window.removeEventListener(USAGE_EVENT, onEvent);
+    };
   }, [refresh]);
 
   // Poll only while quota is actually consumed, so idle sessions stay quiet.

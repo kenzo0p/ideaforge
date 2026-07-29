@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import {
   Bell,
+  Bot,
   Compass,
   FileText,
+  FolderKanban,
+  Rocket,
   LayoutDashboard,
   LogIn,
   LogOut,
@@ -33,8 +36,18 @@ interface RecentProject {
   title: string;
 }
 
+// Nested sections shown under the project you're currently viewing.
+const PROJECT_SECTIONS = [
+  { key: "validation", label: "Validation", icon: Sparkles },
+  { key: "research", label: "Research", icon: Search },
+  { key: "plan", label: "Plan", icon: Rocket },
+  { key: "workspace", label: "Workspace", icon: FolderKanban },
+  { key: "collaborate", label: "Collaborate", icon: Bot },
+] as const;
+
 const NAV = [
-  { href: "/", label: "New idea", icon: Compass, authOnly: false },
+  { href: "/", label: "New idea", icon: Sparkles, authOnly: false },
+  { href: "/?mode=discover", label: "Find a problem", icon: Compass, authOnly: true },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, authOnly: true },
   { href: "/notifications", label: "Notifications", icon: Bell, authOnly: true },
   { href: "/settings", label: "Settings", icon: Settings, authOnly: true },
@@ -44,30 +57,36 @@ export default function AppShell({
   user,
   projects = [],
   unreadCount = 0,
+  initialTheme = "system",
+  initialCollapsed = false,
   children,
 }: {
   user: AppUser | null;
   projects?: RecentProject[];
   unreadCount?: number;
+  /** Read from cookies on the server so there's no flash or layout shift. */
+  initialTheme?: "light" | "dark" | "system";
+  initialCollapsed?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
   const recentProjects = projects.slice(0, 6);
 
-  // Close the mobile drawer whenever the route changes.
-  useEffect(() => setOpen(false), [pathname]);
-
-  // Restore the collapsed preference.
-  useEffect(() => {
-    setCollapsed(localStorage.getItem("sidebar-collapsed") === "1");
-  }, []);
+  // "/" and "/?mode=discover" share a pathname, so compare the mode too.
+  const currentMode = searchParams.get("mode");
+  const currentTab = searchParams.get("tab");
+  const isNavActive = (href: string) => {
+    if (!href.startsWith("/?")) return pathname === href;
+    return pathname === "/" && currentMode === "discover";
+  };
 
   function toggleCollapsed() {
     setCollapsed((v) => {
       const next = !v;
-      localStorage.setItem("sidebar-collapsed", next ? "1" : "0");
+      document.cookie = `sidebar=${next ? "collapsed" : "expanded"}; path=/; max-age=31536000; samesite=lax`;
       return next;
     });
   }
@@ -122,13 +141,16 @@ export default function AppShell({
 
       <nav className="flex flex-col gap-0.5">
         {NAV.filter((n) => !n.authOnly || user).map((n) => {
-          const active = pathname === n.href;
+          // "New idea" shouldn't stay lit while discovery mode is open.
+          const active =
+            n.href === "/" ? pathname === "/" && currentMode !== "discover" : isNavActive(n.href);
           const showBadge = n.href === "/notifications" && unreadCount > 0;
           return (
             <Link
               key={n.href}
               href={n.href}
               title={n.label}
+              onClick={() => setOpen(false)}
               className={`relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
                 mini ? "justify-center" : ""
               } ${
@@ -173,19 +195,45 @@ export default function AppShell({
             {recentProjects.map((p) => {
               const active = pathname === `/projects/${p.id}`;
               return (
-                <Link
-                  key={p.id}
-                  href={`/projects/${p.id}`}
-                  title={p.title}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition ${
-                    active
-                      ? "bg-brand/10 text-brand"
-                      : "text-muted hover:bg-background hover:text-foreground"
-                  }`}
-                >
-                  <FileText className="size-3.5 shrink-0" />
-                  <span className="truncate">{p.title}</span>
-                </Link>
+                <div key={p.id}>
+                  <Link
+                    href={`/projects/${p.id}`}
+                    title={p.title}
+                    onClick={() => setOpen(false)}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition ${
+                      active
+                        ? "bg-brand/10 text-brand"
+                        : "text-muted hover:bg-background hover:text-foreground"
+                    }`}
+                  >
+                    <FileText className="size-3.5 shrink-0" />
+                    <span className="truncate">{p.title}</span>
+                  </Link>
+
+                  {/* Nested section links for the project you're viewing */}
+                  {active && (
+                    <div className="ml-[18px] mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2.5">
+                      {PROJECT_SECTIONS.map((s) => {
+                        const isCurrent = (currentTab ?? "validation") === s.key;
+                        return (
+                          <Link
+                            key={s.key}
+                            href={`/projects/${p.id}?tab=${s.key}`}
+                            onClick={() => setOpen(false)}
+                            className={`flex items-center gap-2 rounded-md px-2 py-1 text-xs transition ${
+                              isCurrent
+                                ? "bg-brand/10 font-medium text-brand"
+                                : "text-muted hover:bg-background hover:text-foreground"
+                            }`}
+                          >
+                            <s.icon className="size-3 shrink-0" />
+                            {s.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -194,7 +242,7 @@ export default function AppShell({
 
       <div className="mt-auto flex flex-col gap-1 border-t border-border pt-2">
         {user && !mini && <UsageMeter />}
-        <ThemeToggle collapsed={mini} />
+        <ThemeToggle collapsed={mini} initialTheme={initialTheme} />
         {user ? (
           mini ? (
             <form action={signOutAction}>
