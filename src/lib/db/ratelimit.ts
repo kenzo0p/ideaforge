@@ -1,12 +1,25 @@
-import { one, run } from "./index";
+import { col } from "./index";
 
 // ---------------------------------------------------------------------------
-// Per-user sliding-window rate limiter (SQLite-backed).
+// Per-user sliding-window rate limiter (MongoDB-backed).
 //
 // Each guarded request records a timestamped hit; a request is allowed only if
 // the count within the trailing window is below the limit. Durable across
 // restarts and shared across instances (unlike an in-memory limiter).
+//
+// Old hits are reaped by a TTL index on `expiresAt` rather than deleted inline.
+// TTL sweeps only run about once a minute, so every query still filters on the
+// window explicitly — the index is housekeeping, not correctness.
 // ---------------------------------------------------------------------------
+
+interface HitDoc {
+  userId: string;
+  kind: string;
+  createdAt: number;
+  expiresAt: Date;
+}
+
+const hits = () => col<HitDoc>("rateHits");
 
 export interface RateResult {
   ok: boolean;
@@ -23,31 +36,29 @@ export async function checkRateLimit(
 ): Promise<RateResult> {
   const now = Date.now();
   const cutoff = now - windowMs;
+  const c = await hits();
 
-  // Drop expired hits for this bucket, then count what's left in the window.
-  await run("DELETE FROM rate_hits WHERE user_id = ? AND kind = ? AND created_at < ?", [
-    userId,
-    kind,
-    cutoff,
-  ]);
-  const row = await one<{ c: number; m: number | null }>(
-    "SELECT COUNT(*) AS c, MIN(created_at) AS m FROM rate_hits WHERE user_id = ? AND kind = ?",
-    [userId, kind],
-  );
-  const count = row?.c ?? 0;
+  const inWindow = await c
+    .find({ userId, kind, createdAt: { $gte: cutoff } }, { projection: { createdAt: 1 } })
+    .sort({ createdAt: 1 })
+    .limit(limit)
+    .toArray();
 
-  if (count >= limit) {
-    const oldest = row?.m ?? now;
+  if (inWindow.length >= limit) {
+    const oldest = inWindow[0]?.createdAt ?? now;
     const retryAfterSec = Math.max(1, Math.ceil((oldest + windowMs - now) / 1000));
     return { ok: false, remaining: 0, retryAfterSec };
   }
 
-  await run("INSERT INTO rate_hits (user_id, kind, created_at) VALUES (?, ?, ?)", [
+  await c.insertOne({
     userId,
     kind,
-    now,
-  ]);
-  return { ok: true, remaining: limit - count - 1, retryAfterSec: 0 };
+    createdAt: now,
+    // Keep the row a little past the window so the count is never short-changed
+    // by a TTL sweep landing mid-window.
+    expiresAt: new Date(now + windowMs * 2),
+  });
+  return { ok: true, remaining: limit - inWindow.length - 1, retryAfterSec: 0 };
 }
 
 export interface UsageSnapshot {
@@ -65,14 +76,17 @@ export async function getUsage(
   windowMs: number,
 ): Promise<UsageSnapshot> {
   const now = Date.now();
-  const row = await one<{ c: number; m: number | null }>(
-    "SELECT COUNT(*) AS c, MIN(created_at) AS m FROM rate_hits WHERE user_id = ? AND kind = ? AND created_at >= ?",
-    [userId, kind, now - windowMs],
-  );
+  const c = await hits();
+  const filter = { userId, kind, createdAt: { $gte: now - windowMs } };
+
+  const [used, oldest] = await Promise.all([
+    c.countDocuments(filter),
+    c.find(filter, { projection: { createdAt: 1 } }).sort({ createdAt: 1 }).limit(1).next(),
+  ]);
 
   return {
-    used: row?.c ?? 0,
+    used,
     limit,
-    resetInSec: row?.m ? Math.max(0, Math.ceil((row.m + windowMs - now) / 1000)) : 0,
+    resetInSec: oldest ? Math.max(0, Math.ceil((oldest.createdAt + windowMs - now) / 1000)) : 0,
   };
 }

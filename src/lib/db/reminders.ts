@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { many, one, run } from "./index";
+import { col } from "./index";
 
 // ---------------------------------------------------------------------------
 // Reminders — scheduled nudges the Telegram bot sends for a project's next step.
+//
+// These stay in their own collections rather than embedded in the project: the
+// scheduler queries due reminders *across every project*, which an embedded
+// array cannot serve efficiently.
 // ---------------------------------------------------------------------------
 
 export interface Reminder {
@@ -16,27 +20,39 @@ export interface Reminder {
   createdAt: number;
 }
 
-interface ReminderRow {
-  id: string;
-  user_id: string;
-  project_id: string;
+interface ReminderDoc {
+  _id: string;
+  userId: string;
+  projectId: string;
   label: string;
-  interval_ms: number;
-  next_due_at: number;
-  active: number;
-  created_at: number;
+  intervalMs: number;
+  nextDueAt: number;
+  active: boolean;
+  createdAt: number;
 }
 
-function toReminder(r: ReminderRow): Reminder {
+interface LogDoc {
+  _id: string;
+  userId: string;
+  projectId: string;
+  nextStep: string;
+  delivered: boolean;
+  createdAt: number;
+}
+
+const reminders = () => col<ReminderDoc>("reminders");
+const logs = () => col<LogDoc>("reminderLogs");
+
+function toReminder(d: ReminderDoc): Reminder {
   return {
-    id: r.id,
-    userId: r.user_id,
-    projectId: r.project_id,
-    label: r.label,
-    intervalMs: r.interval_ms,
-    nextDueAt: r.next_due_at,
-    active: !!r.active,
-    createdAt: r.created_at,
+    id: d._id,
+    userId: d.userId,
+    projectId: d.projectId,
+    label: d.label,
+    intervalMs: d.intervalMs,
+    nextDueAt: d.nextDueAt,
+    active: !!d.active,
+    createdAt: d.createdAt,
   };
 }
 
@@ -47,43 +63,37 @@ export async function createReminder(input: {
   intervalMs: number;
   firstDueAt: number;
 }): Promise<Reminder> {
-  const id = randomUUID();
-  const now = Date.now();
-  await run(
-    `INSERT INTO reminders (id, user_id, project_id, label, interval_ms, next_due_at, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
-    [id, input.userId, input.projectId, input.label, input.intervalMs, input.firstDueAt, now],
-  );
-  return {
-    id,
+  const doc: ReminderDoc = {
+    _id: randomUUID(),
     userId: input.userId,
     projectId: input.projectId,
     label: input.label,
     intervalMs: input.intervalMs,
     nextDueAt: input.firstDueAt,
     active: true,
-    createdAt: now,
+    createdAt: Date.now(),
   };
+  await (await reminders()).insertOne(doc);
+  return toReminder(doc);
 }
 
 export async function listRemindersForProject(
   projectId: string,
   userId: string,
 ): Promise<Reminder[]> {
-  const rows = await many<ReminderRow>(
-    "SELECT * FROM reminders WHERE project_id = ? AND user_id = ? AND active = 1 ORDER BY next_due_at",
-    [projectId, userId],
-  );
-  return rows.map(toReminder);
+  const docs = await (await reminders())
+    .find({ projectId, userId, active: true })
+    .sort({ nextDueAt: 1 })
+    .toArray();
+  return docs.map(toReminder);
 }
 
 /** Active reminders that are due at or before `now`. */
 export async function dueReminders(now: number): Promise<Reminder[]> {
-  const rows = await many<ReminderRow>(
-    "SELECT * FROM reminders WHERE active = 1 AND next_due_at <= ?",
-    [now],
-  );
-  return rows.map(toReminder);
+  const docs = await (await reminders())
+    .find({ active: true, nextDueAt: { $lte: now } })
+    .toArray();
+  return docs.map(toReminder);
 }
 
 /** After sending: reschedule a recurring reminder, or deactivate a one-off. */
@@ -92,15 +102,16 @@ export async function advanceReminder(
   intervalMs: number,
   now: number,
 ): Promise<void> {
+  const c = await reminders();
   if (intervalMs > 0) {
-    await run("UPDATE reminders SET next_due_at = ? WHERE id = ?", [now + intervalMs, id]);
+    await c.updateOne({ _id: id }, { $set: { nextDueAt: now + intervalMs } });
   } else {
-    await run("UPDATE reminders SET active = 0 WHERE id = ?", [id]);
+    await c.updateOne({ _id: id }, { $set: { active: false } });
   }
 }
 
 export async function deleteReminder(id: string, userId: string): Promise<void> {
-  await run("DELETE FROM reminders WHERE id = ? AND user_id = ?", [id, userId]);
+  await (await reminders()).deleteOne({ _id: id, userId });
 }
 
 // --- Reminder history ------------------------------------------------------
@@ -124,47 +135,52 @@ export async function logReminderSent(input: {
   nextStep: string;
   delivered: boolean;
 }): Promise<void> {
-  await run(
-    `INSERT INTO reminder_logs (id, user_id, project_id, next_step, delivered, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [randomUUID(), input.userId, input.projectId, input.nextStep, input.delivered ? 1 : 0, Date.now()],
-  );
+  await (await logs()).insertOne({
+    _id: randomUUID(),
+    userId: input.userId,
+    projectId: input.projectId,
+    nextStep: input.nextStep,
+    delivered: input.delivered,
+    createdAt: Date.now(),
+  });
 }
 
 export async function listAllReminderLogs(userId: string, limit = 50): Promise<Notification[]> {
-  const rows = await many<{
-    id: string;
-    next_step: string;
-    delivered: number;
-    created_at: number;
-    project_id: string;
-    title: string;
-  }>(
-    `SELECT l.id, l.next_step, l.delivered, l.created_at, l.project_id, p.title
-       FROM reminder_logs l
-       JOIN projects p ON p.id = l.project_id
-      WHERE l.user_id = ?
-      ORDER BY l.created_at DESC
-      LIMIT ?`,
-    [userId, limit],
-  );
-  return rows.map((r) => ({
-    id: r.id,
-    nextStep: r.next_step,
-    delivered: !!r.delivered,
-    createdAt: r.created_at,
-    projectId: r.project_id,
-    projectTitle: r.title,
-  }));
+  const rows = await (await logs())
+    .aggregate<LogDoc & { project?: { title: string }[] }>([
+      { $match: { userId } },
+      { $sort: { createdAt: -1 } },
+      { $limit: limit },
+      {
+        // Stands in for the old JOIN onto projects, just to pick up the title.
+        $lookup: {
+          from: "projects",
+          localField: "projectId",
+          foreignField: "_id",
+          as: "project",
+          pipeline: [{ $project: { title: 1 } }],
+        },
+      },
+    ])
+    .toArray();
+
+  return rows
+    // A log whose project was deleted has nothing to link to — drop it, which
+    // is what the old INNER JOIN did.
+    .filter((r) => r.project?.length)
+    .map((r) => ({
+      id: r._id,
+      nextStep: r.nextStep,
+      delivered: !!r.delivered,
+      createdAt: r.createdAt,
+      projectId: r.projectId,
+      projectTitle: r.project![0].title,
+    }));
 }
 
 /** Count of nudges newer than the user's last visit to the inbox. */
 export async function unreadNotificationCount(userId: string, seenAt: number): Promise<number> {
-  const row = await one<{ c: number }>(
-    "SELECT COUNT(*) AS c FROM reminder_logs WHERE user_id = ? AND created_at > ?",
-    [userId, seenAt],
-  );
-  return row?.c ?? 0;
+  return (await logs()).countDocuments({ userId, createdAt: { $gt: seenAt } });
 }
 
 export async function listReminderLogs(
@@ -172,20 +188,15 @@ export async function listReminderLogs(
   userId: string,
   limit = 8,
 ): Promise<ReminderLog[]> {
-  const rows = await many<{
-    id: string;
-    next_step: string;
-    delivered: number;
-    created_at: number;
-  }>(
-    `SELECT id, next_step, delivered, created_at FROM reminder_logs
-      WHERE project_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?`,
-    [projectId, userId, limit],
-  );
-  return rows.map((r) => ({
-    id: r.id,
-    nextStep: r.next_step,
-    delivered: !!r.delivered,
-    createdAt: r.created_at,
+  const docs = await (await logs())
+    .find({ projectId, userId })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .toArray();
+  return docs.map((d) => ({
+    id: d._id,
+    nextStep: d.nextStep,
+    delivered: !!d.delivered,
+    createdAt: d.createdAt,
   }));
 }

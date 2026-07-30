@@ -1,14 +1,65 @@
-# Deploying IdeaForge to Vercel
+# Deploying IdeaForge
 
-The app is a normal Next.js project, so Vercel works — with one caveat that this
-guide solves: **Vercel's filesystem is read-only and ephemeral**, so a SQLite
-*file* cannot be the database. We use [Turso](https://turso.tech), which is
-libSQL — SQLite over the network. Same SQL dialect, so not a single query in the
-codebase changed.
+Two supported hosts. **Render is the simpler of the two for this app** — it runs
+a persistent Node server, so the Telegram poller and the reminder scheduler work
+exactly as they do locally, with no webhook or cron to wire up.
+
+| | Render | Vercel |
+|---|---|---|
+| Process model | persistent server | serverless functions |
+| Telegram | long-polling, automatic | webhook (register manually) |
+| Reminders | in-process scheduler, automatic | Vercel Cron → `/api/cron/reminders` |
+| Database | MongoDB Atlas | MongoDB Atlas |
+
+Both need MongoDB — see [§1](#1-create-the-database). Jump to
+[Render](#deploying-to-render) or read on for Vercel.
+
+## Deploying to Render
+
+1. **New → Web Service**, connect the repo.
+2. Build command `npm install && npm run build`, start command `npm run start`.
+3. Add the environment variables from [§4](#4-set-environment-variables) —
+   **`MONGODB_URI` is required**. Two failures worth recognising:
+
+   ```
+   MongoDB rejected our credentials.
+   ```
+   The username or password in the URI is wrong. Remember to percent-encode a
+   password containing `@ : / ? # %`.
+
+   ```
+   Could not reach the MongoDB cluster.
+   ```
+   Atlas → **Network Access** is not allowing Render's IP. Render's egress IPs
+   are not fixed on lower tiers, so use `0.0.0.0/0`.
+
+4. Nothing else to configure — no webhook, no cron.
+
+**Only one process may poll the Telegram bot.** Once Render is live it owns the
+bot; a dev server still running locally will loop on:
+
+```
+Telegram: another process is already polling this bot (HTTP 409).
+```
+
+Fix it by putting `DISABLE_BACKGROUND_WORKERS=1` in your local `.env.local`, so
+only the deployed instance polls. Remove it when you want to test the bot
+locally — and stop the Render service, or it will take the lock back.
+
+**On Render's free tier the service sleeps when idle**, which stops the reminder
+scheduler until the next request wakes it. Either use a paid instance or hit
+`/api/cron/reminders` from an external scheduler.
+
+---
+
+# Vercel
+
+The app is a normal Next.js project, so Vercel works. The database is MongoDB
+either way; what differs is that Vercel has no long-running process, so the two
+background loops need serverless equivalents.
 
 | | Local dev | Vercel |
 |---|---|---|
-| Database | `data/ideaforge.db` (a file) | Turso (`libsql://…`) |
 | Telegram | long-polling, started by `instrumentation.ts` | webhook → `/api/agents/telegram` |
 | Reminders | `setInterval` scheduler | Vercel Cron → `/api/cron/reminders` |
 
@@ -19,48 +70,52 @@ double-fires.
 
 ## 1. Create the database
 
-```bash
-brew install tursodatabase/tap/turso
-```
+The app uses **MongoDB**. The free Atlas tier is plenty for a hackathon project.
 
-```bash
-turso auth signup
-```
+1. Sign up at <https://cloud.mongodb.com> and create a free **M0** cluster.
+2. **Database Access** → add a user with a password. Note both.
+3. **Network Access** → add an IP allow-list entry. Render and Vercel do not
+   publish fixed egress IPs on their lower tiers, so `0.0.0.0/0` is the normal
+   choice; the connection is still authenticated and TLS-encrypted.
+4. **Connect → Drivers** → copy the connection string. It looks like:
 
-```bash
-turso db create ideaforge
-```
+   ```
+   mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+   ```
 
-Grab the two values you'll need:
+That string is `MONGODB_URI`. Collections and indexes are created automatically
+on first boot — there is no schema step.
 
-```bash
-turso db show ideaforge --url
-```
-
-```bash
-turso db tokens create ideaforge
-```
-
-The free tier (500 databases, 9 GB, 1 billion row reads/month) is far more than
-a hackathon project needs.
+> **Percent-encode the password** if it contains `@ : / ? # %`. `p@ss` must be
+> written `p%40ss`, or the URI silently parses as a different host.
 
 ## 2. Move your existing data over (optional)
 
-Skip this if you're happy starting fresh — the schema is created automatically on
-first boot. To keep the projects already in `data/ideaforge.db`:
+Skip this if you're happy starting fresh. To carry over the projects already in
+the old SQLite/Turso database:
 
 ```bash
-sqlite3 data/ideaforge.db .dump > dump.sql
+node --env-file=.env.local scripts/migrate-sqlite-to-mongo.mjs --dry-run
 ```
 
+That prints per-collection counts without writing. Drop `--dry-run` to apply:
+
 ```bash
-turso db shell ideaforge < dump.sql
+npm run db:migrate
+```
+
+It's keyed on the original ids and upserts, so re-running is safe.
+
+Verify the whole data layer against whatever `MONGODB_URI` points at:
+
+```bash
+npm run test:db
 ```
 
 ## 3. Push to GitHub and import into Vercel
 
 ```bash
-git add -A && git commit -m "Deploy: libSQL/Turso, webhook + cron for serverless"
+git add -A && git commit -m "Move persistence to MongoDB"
 ```
 
 ```bash
@@ -79,8 +134,8 @@ Preview). Copy the values from your local `.env.local`:
 
 | Variable | Value |
 |---|---|
-| `TURSO_DATABASE_URL` | from `turso db show ideaforge --url` |
-| `TURSO_AUTH_TOKEN` | from `turso db tokens create ideaforge` |
+| `MONGODB_URI` | Atlas → Connect → Drivers |
+| `MONGODB_DB` | optional, defaults to `ideaforge` |
 | `ANTHROPIC_API_KEY` | your key |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5` |
 
@@ -137,8 +192,6 @@ upgrade or trigger reminders manually.
 
 1. Sign up with a real email → the verification mail should arrive (Resend).
 2. Run an idea through **Validate → Research → Plan** → **Save to dashboard**.
-3. Reload. The project should still be there — that proves Turso is wired up. If
-   projects vanish on reload, `TURSO_DATABASE_URL` isn't set and the app fell
-   back to a throwaway file in the serverless sandbox.
+3. Reload. The project should still be there — that proves MongoDB is wired up.
 4. Export a PPTX and open it.
 5. Send `/projects` to the bot, then reply with a number.

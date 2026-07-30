@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { one, run } from "./index";
+import { col } from "./index";
 import { getUserById, type User } from "./users";
 
 // ---------------------------------------------------------------------------
@@ -11,75 +11,75 @@ import { getUserById, type User } from "./users";
 
 const CODE_TTL_MS = 1000 * 60 * 15; // 15 minutes
 
+/** `_id` is the chat id, so a chat can only ever map to one account. */
+interface LinkDoc {
+  _id: number;
+  userId: string;
+  activeProjectId: string | null;
+  createdAt: number;
+}
+
+interface CodeDoc {
+  _id: string;
+  userId: string;
+  /** Date so the TTL index reaps stale codes. */
+  expiresAt: Date;
+}
+
+const links = () => col<LinkDoc>("telegramLinks");
+const codes = () => col<CodeDoc>("telegramLinkCodes");
+
 export async function createTelegramLinkCode(userId: string): Promise<{ code: string }> {
   const code = randomBytes(6).toString("hex"); // 12 chars, deep-link safe
-  await run("DELETE FROM telegram_link_codes WHERE user_id = ?", [userId]);
-  await run("INSERT INTO telegram_link_codes (code, user_id, expires_at) VALUES (?, ?, ?)", [
-    code,
-    userId,
-    Date.now() + CODE_TTL_MS,
-  ]);
+  const c = await codes();
+  await c.deleteMany({ userId });
+  await c.insertOne({ _id: code, userId, expiresAt: new Date(Date.now() + CODE_TTL_MS) });
   return { code };
 }
 
 /** Redeem a link code and bind the chat to its user. Returns the user or null. */
 export async function linkTelegramChat(code: string, chatId: number): Promise<User | null> {
-  const row = await one<{ user_id: string; expires_at: number }>(
-    "SELECT user_id, expires_at FROM telegram_link_codes WHERE code = ?",
-    [code],
-  );
-  if (!row) return null;
-  await run("DELETE FROM telegram_link_codes WHERE code = ?", [code]);
-  if (row.expires_at < Date.now()) return null;
+  // Single-use: read and delete in one step so a code can't be redeemed twice.
+  const doc = await (await codes()).findOneAndDelete({ _id: code });
+  if (!doc) return null;
+  if (doc.expiresAt.getTime() < Date.now()) return null;
 
-  await run(
-    "INSERT OR REPLACE INTO telegram_links (chat_id, user_id, created_at) VALUES (?, ?, ?)",
-    [chatId, row.user_id, Date.now()],
+  await (await links()).replaceOne(
+    { _id: chatId },
+    { userId: doc.userId, activeProjectId: null, createdAt: Date.now() },
+    { upsert: true },
   );
-  return getUserById(row.user_id);
+  return getUserById(doc.userId);
 }
 
 export async function getUserByChatId(chatId: number): Promise<User | null> {
-  const row = await one<{ user_id: string }>(
-    "SELECT user_id FROM telegram_links WHERE chat_id = ?",
-    [chatId],
-  );
-  return row ? getUserById(row.user_id) : null;
+  const doc = await (await links()).findOne({ _id: chatId });
+  return doc ? getUserById(doc.userId) : null;
 }
 
 /** Remember which project this chat is asking about. */
 export async function setActiveProject(chatId: number, projectId: string): Promise<void> {
-  await run("UPDATE telegram_links SET active_project_id = ? WHERE chat_id = ?", [
-    projectId,
-    chatId,
-  ]);
+  await (await links()).updateOne({ _id: chatId }, { $set: { activeProjectId: projectId } });
 }
 
 export async function getActiveProjectId(chatId: number): Promise<string | null> {
-  const row = await one<{ active_project_id: string | null }>(
-    "SELECT active_project_id FROM telegram_links WHERE chat_id = ?",
-    [chatId],
+  const doc = await (await links()).findOne(
+    { _id: chatId },
+    { projection: { activeProjectId: 1 } },
   );
-  return row?.active_project_id ?? null;
+  return doc?.activeProjectId ?? null;
 }
 
 /** The Telegram chat_id linked to a user, if any (for outbound messages). */
 export async function getChatIdForUser(userId: string): Promise<number | null> {
-  const row = await one<{ chat_id: number }>(
-    "SELECT chat_id FROM telegram_links WHERE user_id = ? LIMIT 1",
-    [userId],
-  );
-  return row ? Number(row.chat_id) : null;
+  const doc = await (await links()).findOne({ userId }, { projection: { _id: 1 } });
+  return doc ? Number(doc._id) : null;
 }
 
 export async function isTelegramLinked(userId: string): Promise<boolean> {
-  const row = await one<{ n: number }>(
-    "SELECT 1 AS n FROM telegram_links WHERE user_id = ? LIMIT 1",
-    [userId],
-  );
-  return !!row;
+  return (await (await links()).countDocuments({ userId }, { limit: 1 })) > 0;
 }
 
 export async function unlinkTelegram(userId: string): Promise<void> {
-  await run("DELETE FROM telegram_links WHERE user_id = ?", [userId]);
+  await (await links()).deleteMany({ userId });
 }

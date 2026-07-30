@@ -1,9 +1,17 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { many, one, run } from "./index";
+import { col } from "./index";
 import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
 
 // ---------------------------------------------------------------------------
 // Project + Research Workspace repository
+//
+// A project is one document. Milestone progress and workspace items live inside
+// it as arrays: they are only ever read with their project, they are small, and
+// embedding makes deleting a project a single atomic operation with no orphans.
+//
+// `research` and `plan` are stored as real subdocuments. They used to be JSON
+// strings in TEXT columns, which is the clearest sign this data wanted a
+// document store in the first place.
 // ---------------------------------------------------------------------------
 
 export type WorkspaceKind = "source" | "note" | "decision";
@@ -47,41 +55,53 @@ export interface ProjectSummary {
   updatedAt: number;
 }
 
-interface ProjectRow {
+/** Embedded milestone completion state. */
+interface MilestoneDoc {
+  idx: number;
+  done: boolean;
+  updatedAt: number;
+}
+
+/** Embedded workspace item (`id` is ours; `_id` belongs to the project). */
+interface WorkspaceItemDoc {
   id: string;
-  user_id: string | null;
+  kind: WorkspaceKind;
+  title: string;
+  url: string | null;
+  body: string | null;
+  createdAt: number;
+}
+
+interface ProjectDoc {
+  _id: string;
+  userId: string;
   title: string;
   idea: string;
   locale: string | null;
-  validation_md: string | null;
-  research_json: string | null;
-  plan_json: string | null;
-  share_token: string | null;
-  created_at: number;
-  updated_at: number;
+  validationMarkdown: string | null;
+  research: ResearchReport | null;
+  plan: ProjectPlan | null;
+  shareToken?: string;
+  milestones: MilestoneDoc[];
+  workspaceItems: WorkspaceItemDoc[];
+  createdAt: number;
+  updatedAt: number;
 }
 
-function parse<T>(json: string | null): T | null {
-  if (!json) return null;
-  try {
-    return JSON.parse(json) as T;
-  } catch {
-    return null;
-  }
-}
+const projects = () => col<ProjectDoc>("projects");
 
-function rowToProject(r: ProjectRow): Project {
+function toProject(d: ProjectDoc): Project {
   return {
-    id: r.id,
-    title: r.title,
-    idea: r.idea,
-    locale: r.locale,
-    validationMarkdown: r.validation_md,
-    research: parse<ResearchReport>(r.research_json),
-    plan: parse<ProjectPlan>(r.plan_json),
-    shareToken: r.share_token,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
+    id: d._id,
+    title: d.title,
+    idea: d.idea,
+    locale: d.locale ?? null,
+    validationMarkdown: d.validationMarkdown ?? null,
+    research: d.research ?? null,
+    plan: d.plan ?? null,
+    shareToken: d.shareToken ?? null,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
   };
 }
 
@@ -97,77 +117,100 @@ export interface SaveProjectInput {
 
 export async function createProject(input: SaveProjectInput): Promise<Project> {
   const now = Date.now();
-  const id = randomUUID();
-  await run(
-    `INSERT INTO projects
-       (id, user_id, title, idea, locale, validation_md, research_json, plan_json, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id,
-      input.userId,
-      input.title,
-      input.idea,
-      input.locale ?? null,
-      input.validationMarkdown ?? null,
-      input.research ? JSON.stringify(input.research) : null,
-      input.plan ? JSON.stringify(input.plan) : null,
-      now,
-      now,
-    ],
-  );
-  return (await getProject(id, input.userId))!;
+  const doc: ProjectDoc = {
+    _id: randomUUID(),
+    userId: input.userId,
+    title: input.title,
+    idea: input.idea,
+    locale: input.locale ?? null,
+    validationMarkdown: input.validationMarkdown ?? null,
+    research: input.research ?? null,
+    plan: input.plan ?? null,
+    milestones: [],
+    workspaceItems: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  await (await projects()).insertOne(doc);
+  return toProject(doc);
 }
 
 /**
  * Overwrite a project's artifacts (re-saving an in-progress session). Scoped to
- * the owner: a mismatched user_id updates nothing.
+ * the owner: a mismatched userId updates nothing.
  */
 export async function updateProjectArtifacts(
   id: string,
   userId: string,
   input: SaveProjectInput,
 ): Promise<void> {
-  await run(
-    `UPDATE projects
-       SET title = ?, validation_md = ?, research_json = ?, plan_json = ?, updated_at = ?
-     WHERE id = ? AND user_id = ?`,
-    [
-      input.title,
-      input.validationMarkdown ?? null,
-      input.research ? JSON.stringify(input.research) : null,
-      input.plan ? JSON.stringify(input.plan) : null,
-      Date.now(),
-      id,
-      userId,
-    ],
+  await (await projects()).updateOne(
+    { _id: id, userId },
+    {
+      $set: {
+        title: input.title,
+        validationMarkdown: input.validationMarkdown ?? null,
+        research: input.research ?? null,
+        plan: input.plan ?? null,
+        updatedAt: Date.now(),
+      },
+    },
   );
 }
 
 /** Fetch a project only if it belongs to `userId` (authorization boundary). */
 export async function getProject(id: string, userId: string): Promise<Project | null> {
-  const row = await one<ProjectRow>("SELECT * FROM projects WHERE id = ? AND user_id = ?", [
-    id,
-    userId,
-  ]);
-  return row ? rowToProject(row) : null;
+  const d = await (await projects()).findOne({ _id: id, userId });
+  return d ? toProject(d) : null;
 }
 
+/**
+ * Dashboard listing. Uses an aggregation so the heavy `research` and `plan`
+ * bodies never leave the server — only the booleans and counts the cards need.
+ */
 export async function listProjects(userId: string): Promise<ProjectSummary[]> {
-  const rows = await many<ProjectRow>(
-    "SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC",
-    [userId],
-  );
+  const rows = await (await projects())
+    .aggregate<{
+      _id: string;
+      title: string;
+      idea: string;
+      hasValidation: boolean;
+      hasResearch: boolean;
+      hasPlan: boolean;
+      totalMilestones: number;
+      shared: boolean;
+      createdAt: number;
+      updatedAt: number;
+    }>([
+      { $match: { userId } },
+      { $sort: { updatedAt: -1 } },
+      {
+        $project: {
+          title: 1,
+          idea: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          hasValidation: { $gt: [{ $strLenCP: { $ifNull: ["$validationMarkdown", ""] } }, 0] },
+          hasResearch: { $ne: [{ $ifNull: ["$research", null] }, null] },
+          hasPlan: { $ne: [{ $ifNull: ["$plan", null] }, null] },
+          totalMilestones: { $size: { $ifNull: ["$plan.milestones", []] } },
+          shared: { $ne: [{ $ifNull: ["$shareToken", null] }, null] },
+        },
+      },
+    ])
+    .toArray();
+
   return rows.map((r) => ({
-    id: r.id,
+    id: r._id,
     title: r.title,
     idea: r.idea,
-    hasValidation: !!r.validation_md,
-    hasResearch: !!r.research_json,
-    hasPlan: !!r.plan_json,
-    totalMilestones: parse<ProjectPlan>(r.plan_json)?.milestones?.length ?? 0,
-    shared: !!r.share_token,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
+    hasValidation: r.hasValidation,
+    hasResearch: r.hasResearch,
+    hasPlan: r.hasPlan,
+    totalMilestones: r.totalMilestones,
+    shared: r.shared,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
   }));
 }
 
@@ -176,16 +219,20 @@ export async function updateProjectTitle(
   userId: string,
   title: string,
 ): Promise<void> {
-  await run("UPDATE projects SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?", [
-    title,
-    Date.now(),
-    id,
-    userId,
-  ]);
+  await (await projects()).updateOne(
+    { _id: id, userId },
+    { $set: { title, updatedAt: Date.now() } },
+  );
 }
 
 export async function deleteProject(id: string, userId: string): Promise<void> {
-  await run("DELETE FROM projects WHERE id = ? AND user_id = ?", [id, userId]);
+  await (await projects()).deleteOne({ _id: id, userId });
+  // Reminders live in their own collection because the scheduler queries them
+  // across all projects, so they need clearing explicitly.
+  await Promise.all([
+    (await col("reminders")).deleteMany({ projectId: id, userId }),
+    (await col("reminderLogs")).deleteMany({ projectId: id, userId }),
+  ]);
 }
 
 // --- Public sharing --------------------------------------------------------
@@ -197,33 +244,31 @@ export async function enableShare(id: string, userId: string): Promise<string | 
   if (project.shareToken) return project.shareToken;
 
   const token = randomBytes(12).toString("hex");
-  await run("UPDATE projects SET share_token = ? WHERE id = ? AND user_id = ?", [
-    token,
-    id,
-    userId,
-  ]);
+  await (await projects()).updateOne({ _id: id, userId }, { $set: { shareToken: token } });
   return token;
 }
 
 export async function disableShare(id: string, userId: string): Promise<void> {
-  await run("UPDATE projects SET share_token = NULL WHERE id = ? AND user_id = ?", [id, userId]);
+  // $unset rather than null: the unique index on shareToken is sparse, and a
+  // stored null would collide with every other unshared project.
+  await (await projects()).updateOne({ _id: id, userId }, { $unset: { shareToken: "" } });
 }
 
 /** Look up a shared project by its public token (no auth — read-only view). */
 export async function getProjectByShareToken(token: string): Promise<Project | null> {
-  const row = await one<ProjectRow>("SELECT * FROM projects WHERE share_token = ?", [token]);
-  return row ? rowToProject(row) : null;
+  const d = await (await projects()).findOne({ shareToken: token });
+  return d ? toProject(d) : null;
 }
 
 // --- Milestone progress ----------------------------------------------------
 
 /** Indices of completed milestones for a project. */
 export async function getMilestoneProgress(projectId: string): Promise<number[]> {
-  const rows = await many<{ idx: number }>(
-    "SELECT idx FROM milestone_progress WHERE project_id = ? AND done = 1",
-    [projectId],
+  const d = await (await projects()).findOne(
+    { _id: projectId },
+    { projection: { milestones: 1 } },
   );
-  return rows.map((r) => Number(r.idx));
+  return (d?.milestones ?? []).filter((m) => m.done).map((m) => m.idx);
 }
 
 export async function setMilestoneDone(
@@ -231,25 +276,43 @@ export async function setMilestoneDone(
   idx: number,
   done: boolean,
 ): Promise<void> {
-  await run(
-    `INSERT INTO milestone_progress (project_id, idx, done, updated_at)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(project_id, idx) DO UPDATE SET done = excluded.done, updated_at = excluded.updated_at`,
-    [projectId, idx, done ? 1 : 0, Date.now()],
+  const c = await projects();
+  const now = Date.now();
+  // Update in place when the milestone is already tracked…
+  const res = await c.updateOne(
+    { _id: projectId, "milestones.idx": idx },
+    { $set: { "milestones.$.done": done, "milestones.$.updatedAt": now } },
   );
+  // …otherwise append it. (The SQLite version was an upsert on (project, idx).)
+  if (res.matchedCount === 0) {
+    await c.updateOne(
+      { _id: projectId },
+      { $push: { milestones: { idx, done, updatedAt: now } } },
+    );
+  }
 }
 
 /** Completed-milestone counts keyed by project id (for dashboard rings). */
 export async function milestoneCounts(userId: string): Promise<Record<string, number>> {
-  const rows = await many<{ pid: string; c: number }>(
-    `SELECT m.project_id AS pid, COUNT(*) AS c
-       FROM milestone_progress m
-       JOIN projects p ON p.id = m.project_id
-      WHERE p.user_id = ? AND m.done = 1
-      GROUP BY m.project_id`,
-    [userId],
-  );
-  return Object.fromEntries(rows.map((r) => [r.pid, Number(r.c)]));
+  const rows = await (await projects())
+    .aggregate<{ _id: string; c: number }>([
+      { $match: { userId } },
+      {
+        $project: {
+          c: {
+            $size: {
+              $filter: {
+                input: { $ifNull: ["$milestones", []] },
+                cond: { $eq: ["$$this.done", true] },
+              },
+            },
+          },
+        },
+      },
+      { $match: { c: { $gt: 0 } } },
+    ])
+    .toArray();
+  return Object.fromEntries(rows.map((r) => [r._id, r.c]));
 }
 
 // --- Research Workspace ----------------------------------------------------
@@ -261,53 +324,40 @@ export async function addWorkspaceItem(input: {
   url?: string | null;
   body?: string | null;
 }): Promise<WorkspaceItem> {
-  const id = randomUUID();
-  const now = Date.now();
-  await run(
-    `INSERT INTO workspace_items (id, project_id, kind, title, url, body, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, input.projectId, input.kind, input.title, input.url ?? null, input.body ?? null, now],
-  );
-  // Touch the parent project so it sorts to the top of the dashboard.
-  await run("UPDATE projects SET updated_at = ? WHERE id = ?", [now, input.projectId]);
-  return {
-    id,
-    projectId: input.projectId,
+  const item: WorkspaceItemDoc = {
+    id: randomUUID(),
     kind: input.kind,
     title: input.title,
     url: input.url ?? null,
     body: input.body ?? null,
-    createdAt: now,
+    createdAt: Date.now(),
   };
+  // Appending also touches the project so it sorts to the top of the dashboard.
+  await (await projects()).updateOne(
+    { _id: input.projectId },
+    { $push: { workspaceItems: item }, $set: { updatedAt: item.createdAt } },
+  );
+  return { ...item, projectId: input.projectId };
 }
 
 export async function listWorkspaceItems(projectId: string): Promise<WorkspaceItem[]> {
-  const rows = await many<{
-    id: string;
-    project_id: string;
-    kind: WorkspaceKind;
-    title: string;
-    url: string | null;
-    body: string | null;
-    created_at: number;
-  }>("SELECT * FROM workspace_items WHERE project_id = ? ORDER BY created_at DESC", [projectId]);
-  return rows.map((r) => ({
-    id: r.id,
-    projectId: r.project_id,
-    kind: r.kind,
-    title: r.title,
-    url: r.url,
-    body: r.body,
-    createdAt: r.created_at,
-  }));
+  const d = await (await projects()).findOne(
+    { _id: projectId },
+    { projection: { workspaceItems: 1 } },
+  );
+  // Newest first. Two items added in the same millisecond tie on createdAt, so
+  // fall back to insertion order reversed — otherwise a stable sort leaves them
+  // oldest-first, which is exactly backwards.
+  return (d?.workspaceItems ?? [])
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => b.item.createdAt - a.item.createdAt || b.index - a.index)
+    .map(({ item }) => ({ ...item, projectId }));
 }
 
 /** Delete a workspace item only if its project belongs to `userId`. */
 export async function deleteWorkspaceItem(id: string, userId: string): Promise<void> {
-  await run(
-    `DELETE FROM workspace_items
-      WHERE id = ?
-        AND project_id IN (SELECT id FROM projects WHERE user_id = ?)`,
-    [id, userId],
+  await (await projects()).updateOne(
+    { userId, "workspaceItems.id": id },
+    { $pull: { workspaceItems: { id } } },
   );
 }

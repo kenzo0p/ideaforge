@@ -43,8 +43,22 @@ async function loop(): Promise<void> {
         await handleUpdate(update).catch((e) => console.error("Telegram handler error:", e));
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // 409 is not transient: Telegram allows exactly one getUpdates consumer
+      // per bot, so a second instance — usually a dev server left running
+      // alongside a deployment — loops here forever. Say what to do about it,
+      // and back off hard so the logs stay readable.
+      if (message.includes("409")) {
+        console.error(
+          "Telegram: another process is already polling this bot (HTTP 409). " +
+            "Only one may poll at a time — stop the other instance, or set " +
+            "DISABLE_BACKGROUND_WORKERS=1 there. Retrying in 60s.",
+        );
+        await sleep(60_000);
+        continue;
+      }
       // Network blip / transient error — back off briefly and retry.
-      console.error("Telegram poll error:", err instanceof Error ? err.message : err);
+      console.error("Telegram poll error:", message);
       await sleep(3000);
     }
   }

@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { one, run } from "./index";
+import { col } from "./index";
 
 // ---------------------------------------------------------------------------
 // Users + sessions repository
@@ -12,35 +12,48 @@ export interface User {
   emailVerified: boolean;
   /** Preferred output language (BCP-47), or null to use the UI default. */
   locale: string | null;
-  /** Watermark for unread notifications. */
   notificationsSeenAt: number;
   createdAt: number;
 }
 
-interface UserRow {
-  id: string;
+/** Shape stored in Mongo. `_id` is our own UUID. */
+interface UserDoc {
+  _id: string;
   email: string;
   name: string | null;
-  password_hash: string;
-  email_verified: number;
+  passwordHash: string;
+  emailVerified: boolean;
   locale: string | null;
-  notifications_seen_at: number;
-  created_at: number;
+  notificationsSeenAt: number;
+  createdAt: number;
+}
+
+/** Anything with a lifetime: `expiresAt` is a Date so the TTL index reaps it. */
+interface TokenDoc {
+  _id: string;
+  userId: string;
+  expiresAt: Date;
+  createdAt: number;
 }
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 const VERIFY_TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
 const RESET_TTL_MS = 1000 * 60 * 60; // 1 hour — reset links are shorter-lived
 
-function toUser(r: UserRow): User {
+const users = () => col<UserDoc>("users");
+const sessions = () => col<TokenDoc>("sessions");
+const verificationTokens = () => col<TokenDoc>("verificationTokens");
+const passwordResetTokens = () => col<TokenDoc>("passwordResetTokens");
+
+function toUser(d: UserDoc): User {
   return {
-    id: r.id,
-    email: r.email,
-    name: r.name,
-    emailVerified: !!r.email_verified,
-    locale: r.locale,
-    notificationsSeenAt: r.notifications_seen_at ?? 0,
-    createdAt: r.created_at,
+    id: d._id,
+    email: d.email,
+    name: d.name ?? null,
+    emailVerified: !!d.emailVerified,
+    locale: d.locale ?? null,
+    notificationsSeenAt: d.notificationsSeenAt ?? 0,
+    createdAt: d.createdAt,
   };
 }
 
@@ -49,50 +62,68 @@ export async function createUser(
   passwordHash: string,
   name?: string | null,
 ): Promise<User> {
-  const id = randomUUID();
   const now = Date.now();
-  // New accounts start unverified (email_verified defaults to 0).
-  await run(
-    "INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-    [id, email, name ?? null, passwordHash, now],
-  );
-  return {
-    id,
+  // New accounts start unverified.
+  const doc: UserDoc = {
+    _id: randomUUID(),
     email,
     name: name ?? null,
+    passwordHash,
     emailVerified: false,
     locale: null,
     notificationsSeenAt: 0,
     createdAt: now,
   };
+  await (await users()).insertOne(doc);
+  return toUser(doc);
 }
 
 export async function markEmailVerified(userId: string): Promise<void> {
-  await run("UPDATE users SET email_verified = 1 WHERE id = ?", [userId]);
+  await (await users()).updateOne({ _id: userId }, { $set: { emailVerified: true } });
 }
 
 /** Mark the notifications inbox as read up to now. */
 export async function markNotificationsSeen(userId: string): Promise<void> {
-  await run("UPDATE users SET notifications_seen_at = ? WHERE id = ?", [Date.now(), userId]);
+  await (await users()).updateOne({ _id: userId }, { $set: { notificationsSeenAt: Date.now() } });
 }
 
 export async function updateUserLocale(userId: string, locale: string): Promise<void> {
-  await run("UPDATE users SET locale = ? WHERE id = ?", [locale, userId]);
+  await (await users()).updateOne({ _id: userId }, { $set: { locale } });
 }
 
 export async function updateUserName(userId: string, name: string | null): Promise<void> {
-  await run("UPDATE users SET name = ? WHERE id = ?", [name, userId]);
+  await (await users()).updateOne({ _id: userId }, { $set: { name } });
 }
 
 export async function updateUserPassword(userId: string, passwordHash: string): Promise<void> {
-  await run("UPDATE users SET password_hash = ? WHERE id = ?", [passwordHash, userId]);
+  await (await users()).updateOne({ _id: userId }, { $set: { passwordHash } });
   // Force re-auth everywhere after a password change.
-  await run("DELETE FROM sessions WHERE user_id = ?", [userId]);
+  await (await sessions()).deleteMany({ userId });
 }
 
-/** Hard-delete the account; cascades remove projects, reminders, links, etc. */
+/**
+ * Hard-delete the account and everything hanging off it.
+ *
+ * SQLite did this with ON DELETE CASCADE. Mongo has no foreign keys, so the
+ * cascade is explicit — every collection referencing a user is listed here.
+ * Add to this list whenever a new user-owned collection appears.
+ */
 export async function deleteUser(userId: string): Promise<void> {
-  await run("DELETE FROM users WHERE id = ?", [userId]);
+  const owned = [
+    "projects",
+    "sessions",
+    "verificationTokens",
+    "passwordResetTokens",
+    "reminders",
+    "reminderLogs",
+    "telegramLinks",
+    "telegramLinkCodes",
+    "rateHits",
+  ];
+  await Promise.all(
+    owned.map(async (name) => (await col(name)).deleteMany({ userId })),
+  );
+  await (await users()).deleteOne({ _id: userId });
 }
 
 // --- Email verification tokens ---------------------------------------------
@@ -100,12 +131,15 @@ export async function deleteUser(userId: string): Promise<void> {
 export async function createVerificationToken(userId: string): Promise<{ token: string }> {
   const token = randomBytes(32).toString("hex");
   const now = Date.now();
+  const c = await verificationTokens();
   // One outstanding token per user: clear any prior ones first.
-  await run("DELETE FROM verification_tokens WHERE user_id = ?", [userId]);
-  await run(
-    "INSERT INTO verification_tokens (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
-    [token, userId, now + VERIFY_TTL_MS, now],
-  );
+  await c.deleteMany({ userId });
+  await c.insertOne({
+    _id: token,
+    userId,
+    expiresAt: new Date(now + VERIFY_TTL_MS),
+    createdAt: now,
+  });
   return { token };
 }
 
@@ -114,57 +148,54 @@ export async function createVerificationToken(userId: string): Promise<{ token: 
 export async function createPasswordResetToken(userId: string): Promise<{ token: string }> {
   const token = randomBytes(32).toString("hex");
   const now = Date.now();
+  const c = await passwordResetTokens();
   // One outstanding reset per user.
-  await run("DELETE FROM password_reset_tokens WHERE user_id = ?", [userId]);
-  await run(
-    "INSERT INTO password_reset_tokens (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)",
-    [token, userId, now + RESET_TTL_MS, now],
-  );
+  await c.deleteMany({ userId });
+  await c.insertOne({
+    _id: token,
+    userId,
+    expiresAt: new Date(now + RESET_TTL_MS),
+    createdAt: now,
+  });
   return { token };
 }
 
 /** Validate a reset token without consuming it (for rendering the form). */
 export async function peekPasswordResetToken(token: string): Promise<string | null> {
-  const row = await one<{ user_id: string; expires_at: number }>(
-    "SELECT user_id, expires_at FROM password_reset_tokens WHERE token = ?",
-    [token],
-  );
-  if (!row || row.expires_at < Date.now()) return null;
-  return row.user_id;
+  const doc = await (await passwordResetTokens()).findOne({ _id: token });
+  // TTL sweeps run about once a minute, so still check the deadline ourselves.
+  if (!doc || doc.expiresAt.getTime() < Date.now()) return null;
+  return doc.userId;
 }
 
 /** Consume a reset token: returns the userId if valid, else null. */
 export async function consumePasswordResetToken(token: string): Promise<string | null> {
   const userId = await peekPasswordResetToken(token);
-  await run("DELETE FROM password_reset_tokens WHERE token = ?", [token]);
+  await (await passwordResetTokens()).deleteOne({ _id: token });
   return userId;
 }
 
 /** Consume a verification token: returns the userId if valid, else null. */
 export async function consumeVerificationToken(token: string): Promise<string | null> {
-  const row = await one<{ user_id: string; expires_at: number }>(
-    "SELECT user_id, expires_at FROM verification_tokens WHERE token = ?",
-    [token],
-  );
-  if (!row) return null;
-  await run("DELETE FROM verification_tokens WHERE token = ?", [token]);
-  if (row.expires_at < Date.now()) return null;
-  return row.user_id;
+  const doc = await (await verificationTokens()).findOneAndDelete({ _id: token });
+  if (!doc) return null;
+  if (doc.expiresAt.getTime() < Date.now()) return null;
+  return doc.userId;
 }
 
 export async function getUserByEmail(
   email: string,
 ): Promise<(User & { passwordHash: string }) | null> {
-  const r = await one<UserRow>("SELECT * FROM users WHERE email = ?", [email]);
-  return r ? { ...toUser(r), passwordHash: r.password_hash } : null;
+  const d = await (await users()).findOne({ email });
+  return d ? { ...toUser(d), passwordHash: d.passwordHash } : null;
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const r = await one<UserRow>("SELECT * FROM users WHERE id = ?", [id]);
-  return r ? toUser(r) : null;
+  const d = await (await users()).findOne({ _id: id });
+  return d ? toUser(d) : null;
 }
 
-// --- Sessions --------------------------------------------------------------
+// --- Sessions ---------------------------------------------------------------
 
 export async function createSession(
   userId: string,
@@ -172,29 +203,26 @@ export async function createSession(
   const token = randomBytes(32).toString("hex");
   const now = Date.now();
   const expiresAt = now + SESSION_TTL_MS;
-  await run("INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)", [
-    token,
+  await (await sessions()).insertOne({
+    _id: token,
     userId,
-    now,
-    expiresAt,
-  ]);
+    expiresAt: new Date(expiresAt),
+    createdAt: now,
+  });
   return { token, expiresAt };
 }
 
 /** Resolve a session token to its user, clearing it if expired. */
 export async function getUserForSession(token: string): Promise<User | null> {
-  const row = await one<{ user_id: string; expires_at: number }>(
-    "SELECT user_id, expires_at FROM sessions WHERE id = ?",
-    [token],
-  );
-  if (!row) return null;
-  if (row.expires_at < Date.now()) {
+  const doc = await (await sessions()).findOne({ _id: token });
+  if (!doc) return null;
+  if (doc.expiresAt.getTime() < Date.now()) {
     await destroySession(token);
     return null;
   }
-  return getUserById(row.user_id);
+  return getUserById(doc.userId);
 }
 
 export async function destroySession(token: string): Promise<void> {
-  await run("DELETE FROM sessions WHERE id = ?", [token]);
+  await (await sessions()).deleteOne({ _id: token });
 }

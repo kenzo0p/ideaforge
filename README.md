@@ -16,7 +16,7 @@ plan, and the resources to ship it.
 | **1** | Foundation: provider abstraction, iNSIGHTS Layer 2 service seam, idea → **problem validation** (streamed) | ✅ Done |
 | **2** | **DeepSearch** + **Real-time Web Intelligence** — web search, citation-backed research, solution comparison, gaps | ✅ Done |
 | **3** | **Project HUB** + **Knowledge Clustering** — milestones, architecture, stack, APIs, timeline; repos/datasets/papers | ✅ Done |
-| **4** | **Personalized Dashboards** + **Research Workspaces** — SQLite persistence, save/open projects, sources/notes/decisions | ✅ Done |
+| **4** | **Personalized Dashboards** + **Research Workspaces** — MongoDB persistence, save/open projects, sources/notes/decisions | ✅ Done |
 | **5** | **AI Agents** (in-app console + Telegram webhook) + **Multilingual** (8-language selector, locale threaded end-to-end) | ✅ Done |
 
 The brief requires **≥4** Layer 2 capabilities; **all eight are live.** 🎉
@@ -47,9 +47,11 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   validation, DeepSearch, Project HUB, and knowledge clustering.
 - **`lib/email`** — swappable mailer (console dev / Resend prod) powering email verification,
   with a graceful fallback link when a real send can't be delivered.
-- **`lib/db`** — SQLite persistence via Node's built-in **`node:sqlite`** (zero dependencies,
-  zero native build). Projects + Research Workspace items; mutations go through Server Actions
-  in `lib/actions.ts`. DB file lives at `data/ideaforge.db` (git-ignored).
+- **`lib/db`** — **MongoDB** persistence, one repository module per aggregate. A project is a
+  single document: its plan, research, milestone progress and workspace items are all embedded,
+  so reads are one round-trip and deleting a project is atomic. Mutations go through Server
+  Actions in `lib/actions.ts`. Set `MONGODB_URI`; indexes are created on first boot, and
+  short-lived records (sessions, tokens, rate-limit hits) are reaped by TTL indexes.
 - **`lib/auth`** — email + password authentication with **no external library**: passwords
   hashed with Node's `crypto.scrypt` (salted), opaque session tokens in an HttpOnly cookie
   backed by a `sessions` table. `getCurrentUser()` gates server components/actions; every
