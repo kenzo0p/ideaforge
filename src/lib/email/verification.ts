@@ -11,6 +11,38 @@ async function baseUrl(): Promise<string> {
   return `${proto}://${host}`;
 }
 
+export async function sendPasswordResetEmail(
+  to: string,
+  token: string,
+): Promise<{ link: string; delivered: boolean }> {
+  const link = `${await baseUrl()}/reset-password?token=${token}`;
+  const mailer = getMailer();
+  const message = {
+    to,
+    subject: "Reset your IdeaForge password",
+    text: `Someone requested a password reset for your IdeaForge account.\n\nReset it here:\n${link}\n\nThis link expires in 1 hour. If this wasn't you, ignore this email — nothing has changed.`,
+    html: `
+      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto">
+        <h2>Reset your password</h2>
+        <p>Someone requested a password reset for your IdeaForge account.</p>
+        <p><a href="${link}" style="display:inline-block;background:#6d4aff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Choose a new password</a></p>
+        <p style="color:#666;font-size:13px">Or paste this link: ${link}<br/>It expires in 1 hour. If this wasn't you, ignore this email — nothing has changed.</p>
+      </div>`,
+  };
+
+  if (mailer.isConsole) {
+    await mailer.send(message);
+    return { link, delivered: false };
+  }
+  try {
+    await mailer.send(message);
+    return { link, delivered: true };
+  } catch (err) {
+    console.error("Password reset email failed to send:", err);
+    return { link, delivered: false };
+  }
+}
+
 export async function sendVerificationEmail(
   to: string,
   token: string,

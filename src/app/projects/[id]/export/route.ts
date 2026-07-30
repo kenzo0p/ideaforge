@@ -11,7 +11,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const project = getProject(id, user.id);
+  const project = await getProject(id, user.id);
   if (!project) return new Response("Not found", { status: 404 });
 
   const md = buildMarkdownBrief({

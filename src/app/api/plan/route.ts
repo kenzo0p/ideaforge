@@ -12,7 +12,7 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const auth = await requireApiUser();
   if (auth instanceof Response) return auth;
-  const limited = enforceRateLimit(auth.id, "copilot");
+  const limited = await enforceRateLimit(auth.id, "copilot");
   if (limited) return limited;
 
   let body: { idea?: string; locale?: string; research?: ResearchReport };

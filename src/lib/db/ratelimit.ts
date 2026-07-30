@@ -1,11 +1,11 @@
-import { getDb } from "./index";
+import { one, run } from "./index";
 
 // ---------------------------------------------------------------------------
-// Per-user sliding-window rate limiter (SQLite-backed, zero-config).
+// Per-user sliding-window rate limiter (SQLite-backed).
 //
 // Each guarded request records a timestamped hit; a request is allowed only if
 // the count within the trailing window is below the limit. Durable across
-// restarts and shared across processes (unlike an in-memory limiter).
+// restarts and shared across instances (unlike an in-memory limiter).
 // ---------------------------------------------------------------------------
 
 export interface RateResult {
@@ -15,40 +15,39 @@ export interface RateResult {
   retryAfterSec: number;
 }
 
-export function checkRateLimit(
+export async function checkRateLimit(
   userId: string,
   kind: string,
   limit: number,
   windowMs: number,
-): RateResult {
-  const db = getDb();
+): Promise<RateResult> {
   const now = Date.now();
   const cutoff = now - windowMs;
 
   // Drop expired hits for this bucket, then count what's left in the window.
-  db.prepare("DELETE FROM rate_hits WHERE user_id = ? AND kind = ? AND created_at < ?").run(
+  await run("DELETE FROM rate_hits WHERE user_id = ? AND kind = ? AND created_at < ?", [
     userId,
     kind,
     cutoff,
+  ]);
+  const row = await one<{ c: number; m: number | null }>(
+    "SELECT COUNT(*) AS c, MIN(created_at) AS m FROM rate_hits WHERE user_id = ? AND kind = ?",
+    [userId, kind],
   );
-  const { c } = db
-    .prepare("SELECT COUNT(*) AS c FROM rate_hits WHERE user_id = ? AND kind = ?")
-    .get(userId, kind) as { c: number };
+  const count = row?.c ?? 0;
 
-  if (c >= limit) {
-    const { m } = db
-      .prepare("SELECT MIN(created_at) AS m FROM rate_hits WHERE user_id = ? AND kind = ?")
-      .get(userId, kind) as { m: number };
-    const retryAfterSec = Math.max(1, Math.ceil((m + windowMs - now) / 1000));
+  if (count >= limit) {
+    const oldest = row?.m ?? now;
+    const retryAfterSec = Math.max(1, Math.ceil((oldest + windowMs - now) / 1000));
     return { ok: false, remaining: 0, retryAfterSec };
   }
 
-  db.prepare("INSERT INTO rate_hits (user_id, kind, created_at) VALUES (?, ?, ?)").run(
+  await run("INSERT INTO rate_hits (user_id, kind, created_at) VALUES (?, ?, ?)", [
     userId,
     kind,
     now,
-  );
-  return { ok: true, remaining: limit - c - 1, retryAfterSec: 0 };
+  ]);
+  return { ok: true, remaining: limit - count - 1, retryAfterSec: 0 };
 }
 
 export interface UsageSnapshot {
@@ -59,23 +58,21 @@ export interface UsageSnapshot {
 }
 
 /** Read current usage for a bucket without recording a hit. */
-export function getUsage(
+export async function getUsage(
   userId: string,
   kind: string,
   limit: number,
   windowMs: number,
-): UsageSnapshot {
-  const db = getDb();
+): Promise<UsageSnapshot> {
   const now = Date.now();
-  const row = db
-    .prepare(
-      "SELECT COUNT(*) AS c, MIN(created_at) AS m FROM rate_hits WHERE user_id = ? AND kind = ? AND created_at >= ?",
-    )
-    .get(userId, kind, now - windowMs) as { c: number; m: number | null };
+  const row = await one<{ c: number; m: number | null }>(
+    "SELECT COUNT(*) AS c, MIN(created_at) AS m FROM rate_hits WHERE user_id = ? AND kind = ? AND created_at >= ?",
+    [userId, kind, now - windowMs],
+  );
 
   return {
-    used: row.c,
+    used: row?.c ?? 0,
     limit,
-    resetInSec: row.m ? Math.max(0, Math.ceil((row.m + windowMs - now) / 1000)) : 0,
+    resetInSec: row?.m ? Math.max(0, Math.ceil((row.m + windowMs - now) / 1000)) : 0,
   };
 }

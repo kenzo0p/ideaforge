@@ -15,7 +15,7 @@ export default async function SharedBriefPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const project = getProjectByShareToken(token);
+  const project = await getProjectByShareToken(token);
   if (!project) notFound();
 
   const markdown = buildMarkdownBrief({

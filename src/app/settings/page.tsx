@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   if (!user) redirect("/sign-in");
 
   const telegramConfigured = isTelegramConfigured();
-  const telegramLinked = telegramConfigured && isTelegramLinked(user.id);
+  const telegramLinked = telegramConfigured && await isTelegramLinked(user.id);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10">

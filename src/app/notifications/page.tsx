@@ -14,10 +14,10 @@ export default async function NotificationsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
-  const notifications = listAllReminderLogs(user.id);
+  const notifications = await listAllReminderLogs(user.id);
   const seenAt = user.notificationsSeenAt;
   // Clear the badge for future page loads (this render still highlights new items).
-  markNotificationsSeen(user.id);
+  await markNotificationsSeen(user.id);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10">

@@ -15,12 +15,14 @@ import {
   Search,
   Sparkles,
   Square,
+  Upload,
   type LucideIcon,
 } from "lucide-react";
 import ResearchPanel from "@/components/ResearchPanel";
 import ProjectPlanPanel from "@/components/ProjectPlanPanel";
 import DiscoverPanel from "@/components/DiscoverPanel";
 import ResultTabs from "@/components/ResultTabs";
+import ReviewPanel from "@/components/ReviewPanel";
 import { USAGE_EVENT } from "@/components/UsageMeter";
 import { saveProjectAction } from "@/lib/actions";
 import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
@@ -40,6 +42,7 @@ const LANGUAGES: Array<{ code: string; label: string }> = [
 type Status = "idle" | "streaming" | "done" | "error";
 type ResearchStatus = "idle" | "loading" | "done" | "error";
 type ResultTab = "validation" | "research" | "plan";
+type ConsoleMode = "idea" | "discover" | "review";
 
 export default function IdeaConsole({
   isAuthed = false,
@@ -49,7 +52,7 @@ export default function IdeaConsole({
   isAuthed?: boolean;
   defaultLocale?: string;
   /** "discover" opens straight into problem discovery (via /?mode=discover). */
-  initialMode?: "idea" | "discover";
+  initialMode?: ConsoleMode;
 }) {
   const [idea, setIdea] = useState("");
   const [analyzedIdea, setAnalyzedIdea] = useState("");
@@ -57,7 +60,7 @@ export default function IdeaConsole({
   const [status, setStatus] = useState<Status>("idle");
   const [provider, setProvider] = useState<string | null>(null);
   const [locale, setLocale] = useState(defaultLocale);
-  const [mode, setMode] = useState<"idea" | "discover">(initialMode);
+  const [mode, setMode] = useState<ConsoleMode>(initialMode);
   const [tab, setTab] = useState<ResultTab>("validation");
   const abortRef = useRef<AbortController | null>(null);
 
@@ -248,7 +251,12 @@ export default function IdeaConsole({
         <button onClick={() => setMode("discover")} className={modeBtn(mode === "discover")}>
           <Lightbulb className="size-4" /> Find a problem
         </button>
+        <button onClick={() => setMode("review")} className={modeBtn(mode === "review")}>
+          <Upload className="size-4" /> Review my deck
+        </button>
       </div>
+
+      {mode === "review" && <ReviewPanel locale={locale} />}
 
       {mode === "discover" && (
         <DiscoverPanel
@@ -325,34 +333,11 @@ export default function IdeaConsole({
       {/* Results — one step per tab instead of one long stacked page */}
       {(output || streaming) && (
         <div className="mt-5 space-y-4">
-          {/* Toolbar: save/open stay visible across every tab */}
-          {status === "done" && (
-            <div className="flex flex-wrap items-center justify-end gap-2 text-xs">
-              {provider && (
-                <span className="mr-auto rounded-full border border-border px-2 py-0.5 text-muted">
-                  {provider}
-                </span>
-              )}
-              {savedId && (
-                <button
-                  onClick={() => router.push(`/projects/${savedId}`)}
-                  className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-500"
-                >
-                  <Check className="size-3.5" /> Open project
-                </button>
-              )}
-              <button
-                onClick={saveProject}
-                disabled={saving}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 font-medium text-foreground transition hover:border-brand/50 disabled:opacity-50"
-              >
-                {saving ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Bookmark className="size-3.5" />
-                )}
-                {!isAuthed ? "Sign in to save" : savedId ? "Update" : "Save to dashboard"}
-              </button>
+          {provider && (
+            <div className="flex justify-end text-xs">
+              <span className="rounded-full border border-border px-2 py-0.5 text-muted">
+                {provider}
+              </span>
             </div>
           )}
 
@@ -451,6 +436,31 @@ export default function IdeaConsole({
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Floating save bar — reachable from anywhere in a long result page */}
+      {mode === "idea" && status === "done" && (
+        <div className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full border border-border bg-card/95 p-1.5 pl-3 shadow-lg backdrop-blur">
+          <span className="hidden text-xs text-muted sm:inline">
+            {savedId ? "Saved to dashboard" : "Don't lose this"}
+          </span>
+          {savedId && (
+            <button
+              onClick={() => router.push(`/projects/${savedId}`)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-500 transition hover:bg-emerald-500/20"
+            >
+              <Check className="size-4" /> Open
+            </button>
+          )}
+          <button
+            onClick={saveProject}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Bookmark className="size-4" />}
+            {!isAuthed ? "Sign in to save" : savedId ? "Update" : "Save"}
+          </button>
         </div>
       )}
         </>

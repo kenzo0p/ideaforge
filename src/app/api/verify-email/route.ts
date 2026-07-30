@@ -12,13 +12,13 @@ export async function GET(req: Request) {
     return NextResponse.redirect(new URL("/sign-in?verify=invalid", req.url));
   }
 
-  const userId = consumeVerificationToken(token);
+  const userId = await consumeVerificationToken(token);
   if (!userId) {
     return NextResponse.redirect(new URL("/sign-in?verify=expired", req.url));
   }
 
-  markEmailVerified(userId);
-  const { token: sessionToken } = createSession(userId);
+  await markEmailVerified(userId);
+  const { token: sessionToken } = await createSession(userId);
 
   const res = NextResponse.redirect(new URL("/dashboard?verified=1", req.url));
   res.cookies.set(SESSION_COOKIE, sessionToken, sessionCookieOptions());

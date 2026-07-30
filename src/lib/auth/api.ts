@@ -30,9 +30,12 @@ export const LIMITS: Record<string, { limit: number; windowMs: number }> = {
  * Enforce the per-user rate limit for a bucket. Returns a 429 Response when the
  * limit is exceeded, otherwise null (proceed).
  */
-export function enforceRateLimit(userId: string, kind: keyof typeof LIMITS): Response | null {
+export async function enforceRateLimit(
+  userId: string,
+  kind: keyof typeof LIMITS,
+): Promise<Response | null> {
   const { limit, windowMs } = LIMITS[kind];
-  const result = checkRateLimit(userId, kind, limit, windowMs);
+  const result = await checkRateLimit(userId, kind, limit, windowMs);
   if (!result.ok) {
     return Response.json(
       { error: `Rate limit reached. Try again in ${result.retryAfterSec}s.` },

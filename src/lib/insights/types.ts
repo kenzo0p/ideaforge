@@ -71,6 +71,35 @@ export interface IdeaInput {
   locale?: string;
 }
 
+// --- Deck / document review ------------------------------------------------
+
+export interface ReviewPoint {
+  title: string;
+  detail: string;
+}
+
+export interface SectionNote {
+  /** Slide or page number (1-based). */
+  index: number;
+  issue: string;
+  fix: string;
+}
+
+export interface DocumentReview {
+  fileName: string;
+  kind: "pptx" | "pdf";
+  sectionCount: number;
+  /** 0–100 readiness score with a one-line justification. */
+  score: number;
+  verdict: string;
+  strengths: ReviewPoint[];
+  improvements: ReviewPoint[];
+  missing: string[];
+  sectionNotes: SectionNote[];
+  truncated: boolean;
+  demo: boolean;
+}
+
 // --- Problem Discovery -----------------------------------------------------
 
 /** A real-world problem worth solving, surfaced from current signals. */

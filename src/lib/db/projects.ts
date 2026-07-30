@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { getDb } from "./index";
+import { many, one, run } from "./index";
 import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
 
 // ---------------------------------------------------------------------------
@@ -95,41 +95,43 @@ export interface SaveProjectInput {
   plan?: ProjectPlan | null;
 }
 
-export function createProject(input: SaveProjectInput): Project {
-  const db = getDb();
+export async function createProject(input: SaveProjectInput): Promise<Project> {
   const now = Date.now();
   const id = randomUUID();
-  db.prepare(
+  await run(
     `INSERT INTO projects
        (id, user_id, title, idea, locale, validation_md, research_json, plan_json, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    input.userId,
-    input.title,
-    input.idea,
-    input.locale ?? null,
-    input.validationMarkdown ?? null,
-    input.research ? JSON.stringify(input.research) : null,
-    input.plan ? JSON.stringify(input.plan) : null,
-    now,
-    now,
+    [
+      id,
+      input.userId,
+      input.title,
+      input.idea,
+      input.locale ?? null,
+      input.validationMarkdown ?? null,
+      input.research ? JSON.stringify(input.research) : null,
+      input.plan ? JSON.stringify(input.plan) : null,
+      now,
+      now,
+    ],
   );
-  return getProject(id, input.userId)!;
+  return (await getProject(id, input.userId))!;
 }
 
 /**
  * Overwrite a project's artifacts (re-saving an in-progress session). Scoped to
  * the owner: a mismatched user_id updates nothing.
  */
-export function updateProjectArtifacts(id: string, userId: string, input: SaveProjectInput): void {
-  getDb()
-    .prepare(
-      `UPDATE projects
-         SET title = ?, validation_md = ?, research_json = ?, plan_json = ?, updated_at = ?
-       WHERE id = ? AND user_id = ?`,
-    )
-    .run(
+export async function updateProjectArtifacts(
+  id: string,
+  userId: string,
+  input: SaveProjectInput,
+): Promise<void> {
+  await run(
+    `UPDATE projects
+       SET title = ?, validation_md = ?, research_json = ?, plan_json = ?, updated_at = ?
+     WHERE id = ? AND user_id = ?`,
+    [
       input.title,
       input.validationMarkdown ?? null,
       input.research ? JSON.stringify(input.research) : null,
@@ -137,21 +139,24 @@ export function updateProjectArtifacts(id: string, userId: string, input: SavePr
       Date.now(),
       id,
       userId,
-    );
+    ],
+  );
 }
 
 /** Fetch a project only if it belongs to `userId` (authorization boundary). */
-export function getProject(id: string, userId: string): Project | null {
-  const row = getDb()
-    .prepare("SELECT * FROM projects WHERE id = ? AND user_id = ?")
-    .get(id, userId) as ProjectRow | undefined;
+export async function getProject(id: string, userId: string): Promise<Project | null> {
+  const row = await one<ProjectRow>("SELECT * FROM projects WHERE id = ? AND user_id = ?", [
+    id,
+    userId,
+  ]);
   return row ? rowToProject(row) : null;
 }
 
-export function listProjects(userId: string): ProjectSummary[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC")
-    .all(userId) as ProjectRow[];
+export async function listProjects(userId: string): Promise<ProjectSummary[]> {
+  const rows = await many<ProjectRow>(
+    "SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC",
+    [userId],
+  );
   return rows.map((r) => ({
     id: r.id,
     title: r.title,
@@ -166,104 +171,118 @@ export function listProjects(userId: string): ProjectSummary[] {
   }));
 }
 
-export function updateProjectTitle(id: string, userId: string, title: string): void {
-  getDb()
-    .prepare("UPDATE projects SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?")
-    .run(title, Date.now(), id, userId);
+export async function updateProjectTitle(
+  id: string,
+  userId: string,
+  title: string,
+): Promise<void> {
+  await run("UPDATE projects SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?", [
+    title,
+    Date.now(),
+    id,
+    userId,
+  ]);
 }
 
-export function deleteProject(id: string, userId: string): void {
-  getDb().prepare("DELETE FROM projects WHERE id = ? AND user_id = ?").run(id, userId);
+export async function deleteProject(id: string, userId: string): Promise<void> {
+  await run("DELETE FROM projects WHERE id = ? AND user_id = ?", [id, userId]);
 }
 
 // --- Public sharing --------------------------------------------------------
 
 /** Enable sharing and return the token (idempotent — reuses an existing one). */
-export function enableShare(id: string, userId: string): string | null {
-  const project = getProject(id, userId);
+export async function enableShare(id: string, userId: string): Promise<string | null> {
+  const project = await getProject(id, userId);
   if (!project) return null;
   if (project.shareToken) return project.shareToken;
 
   const token = randomBytes(12).toString("hex");
-  getDb()
-    .prepare("UPDATE projects SET share_token = ? WHERE id = ? AND user_id = ?")
-    .run(token, id, userId);
+  await run("UPDATE projects SET share_token = ? WHERE id = ? AND user_id = ?", [
+    token,
+    id,
+    userId,
+  ]);
   return token;
 }
 
-export function disableShare(id: string, userId: string): void {
-  getDb()
-    .prepare("UPDATE projects SET share_token = NULL WHERE id = ? AND user_id = ?")
-    .run(id, userId);
+export async function disableShare(id: string, userId: string): Promise<void> {
+  await run("UPDATE projects SET share_token = NULL WHERE id = ? AND user_id = ?", [id, userId]);
 }
 
 /** Look up a shared project by its public token (no auth — read-only view). */
-export function getProjectByShareToken(token: string): Project | null {
-  const row = getDb()
-    .prepare("SELECT * FROM projects WHERE share_token = ?")
-    .get(token) as ProjectRow | undefined;
+export async function getProjectByShareToken(token: string): Promise<Project | null> {
+  const row = await one<ProjectRow>("SELECT * FROM projects WHERE share_token = ?", [token]);
   return row ? rowToProject(row) : null;
 }
 
 // --- Milestone progress ----------------------------------------------------
 
 /** Indices of completed milestones for a project. */
-export function getMilestoneProgress(projectId: string): number[] {
-  const rows = getDb()
-    .prepare("SELECT idx FROM milestone_progress WHERE project_id = ? AND done = 1")
-    .all(projectId) as Array<{ idx: number }>;
-  return rows.map((r) => r.idx);
+export async function getMilestoneProgress(projectId: string): Promise<number[]> {
+  const rows = await many<{ idx: number }>(
+    "SELECT idx FROM milestone_progress WHERE project_id = ? AND done = 1",
+    [projectId],
+  );
+  return rows.map((r) => Number(r.idx));
 }
 
-export function setMilestoneDone(projectId: string, idx: number, done: boolean): void {
-  getDb()
-    .prepare(
-      `INSERT INTO milestone_progress (project_id, idx, done, updated_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(project_id, idx) DO UPDATE SET done = excluded.done, updated_at = excluded.updated_at`,
-    )
-    .run(projectId, idx, done ? 1 : 0, Date.now());
+export async function setMilestoneDone(
+  projectId: string,
+  idx: number,
+  done: boolean,
+): Promise<void> {
+  await run(
+    `INSERT INTO milestone_progress (project_id, idx, done, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(project_id, idx) DO UPDATE SET done = excluded.done, updated_at = excluded.updated_at`,
+    [projectId, idx, done ? 1 : 0, Date.now()],
+  );
 }
 
 /** Completed-milestone counts keyed by project id (for dashboard rings). */
-export function milestoneCounts(userId: string): Record<string, number> {
-  const rows = getDb()
-    .prepare(
-      `SELECT m.project_id AS pid, COUNT(*) AS c
-         FROM milestone_progress m
-         JOIN projects p ON p.id = m.project_id
-        WHERE p.user_id = ? AND m.done = 1
-        GROUP BY m.project_id`,
-    )
-    .all(userId) as Array<{ pid: string; c: number }>;
-  return Object.fromEntries(rows.map((r) => [r.pid, r.c]));
+export async function milestoneCounts(userId: string): Promise<Record<string, number>> {
+  const rows = await many<{ pid: string; c: number }>(
+    `SELECT m.project_id AS pid, COUNT(*) AS c
+       FROM milestone_progress m
+       JOIN projects p ON p.id = m.project_id
+      WHERE p.user_id = ? AND m.done = 1
+      GROUP BY m.project_id`,
+    [userId],
+  );
+  return Object.fromEntries(rows.map((r) => [r.pid, Number(r.c)]));
 }
 
 // --- Research Workspace ----------------------------------------------------
 
-export function addWorkspaceItem(input: {
+export async function addWorkspaceItem(input: {
   projectId: string;
   kind: WorkspaceKind;
   title: string;
   url?: string | null;
   body?: string | null;
-}): WorkspaceItem {
-  const db = getDb();
+}): Promise<WorkspaceItem> {
   const id = randomUUID();
   const now = Date.now();
-  db.prepare(
+  await run(
     `INSERT INTO workspace_items (id, project_id, kind, title, url, body, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, input.projectId, input.kind, input.title, input.url ?? null, input.body ?? null, now);
+    [id, input.projectId, input.kind, input.title, input.url ?? null, input.body ?? null, now],
+  );
   // Touch the parent project so it sorts to the top of the dashboard.
-  db.prepare("UPDATE projects SET updated_at = ? WHERE id = ?").run(now, input.projectId);
-  return { id, projectId: input.projectId, kind: input.kind, title: input.title, url: input.url ?? null, body: input.body ?? null, createdAt: now };
+  await run("UPDATE projects SET updated_at = ? WHERE id = ?", [now, input.projectId]);
+  return {
+    id,
+    projectId: input.projectId,
+    kind: input.kind,
+    title: input.title,
+    url: input.url ?? null,
+    body: input.body ?? null,
+    createdAt: now,
+  };
 }
 
-export function listWorkspaceItems(projectId: string): WorkspaceItem[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM workspace_items WHERE project_id = ? ORDER BY created_at DESC")
-    .all(projectId) as Array<{
+export async function listWorkspaceItems(projectId: string): Promise<WorkspaceItem[]> {
+  const rows = await many<{
     id: string;
     project_id: string;
     kind: WorkspaceKind;
@@ -271,7 +290,7 @@ export function listWorkspaceItems(projectId: string): WorkspaceItem[] {
     url: string | null;
     body: string | null;
     created_at: number;
-  }>;
+  }>("SELECT * FROM workspace_items WHERE project_id = ? ORDER BY created_at DESC", [projectId]);
   return rows.map((r) => ({
     id: r.id,
     projectId: r.project_id,
@@ -284,12 +303,11 @@ export function listWorkspaceItems(projectId: string): WorkspaceItem[] {
 }
 
 /** Delete a workspace item only if its project belongs to `userId`. */
-export function deleteWorkspaceItem(id: string, userId: string): void {
-  getDb()
-    .prepare(
-      `DELETE FROM workspace_items
-        WHERE id = ?
-          AND project_id IN (SELECT id FROM projects WHERE user_id = ?)`,
-    )
-    .run(id, userId);
+export async function deleteWorkspaceItem(id: string, userId: string): Promise<void> {
+  await run(
+    `DELETE FROM workspace_items
+      WHERE id = ?
+        AND project_id IN (SELECT id FROM projects WHERE user_id = ?)`,
+    [id, userId],
+  );
 }

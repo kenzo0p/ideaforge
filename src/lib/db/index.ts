@@ -1,20 +1,30 @@
-import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname } from "node:path";
+import { createClient, type Client, type InArgs, type Row } from "@libsql/client";
 
 // ---------------------------------------------------------------------------
-// SQLite persistence (zero-config via Node's built-in node:sqlite)
+// SQLite persistence via libSQL.
 //
-// One file-backed database, opened once and reused. A globalThis singleton keeps
-// a single connection across dev/HMR reloads. Schema is created on first open.
+// One driver, two targets:
+//   • local dev  → file:data/ideaforge.db (no account, same as before)
+//   • production → Turso over HTTP (TURSO_DATABASE_URL + TURSO_AUTH_TOKEN),
+//     which works on serverless platforms where the filesystem is ephemeral.
+//
+// The SQL dialect is identical either way, so every query in this codebase is
+// unchanged. A globalThis singleton keeps one client across dev/HMR reloads.
 // ---------------------------------------------------------------------------
 
-const DB_FILE = process.env.IDEAFORGE_DB ?? "data/ideaforge.db";
-// Scope the path explicitly under cwd; the ignore comment stops the bundler from
-// tracing the whole project just because this join is computed at runtime.
-const DB_PATH = isAbsolute(DB_FILE)
-  ? DB_FILE
-  : join(/* turbopackIgnore: true */ process.cwd(), DB_FILE);
+function connectionUrl(): string {
+  if (process.env.TURSO_DATABASE_URL) return process.env.TURSO_DATABASE_URL;
+  const file = (process.env.IDEAFORGE_DB ?? "data/ideaforge.db").replace(/^file:/, "");
+  // libSQL won't create missing parent directories for a file DB.
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+  } catch {
+    // Read-only filesystem (serverless) — TURSO_DATABASE_URL is required there.
+  }
+  return `file:${file}`;
+}
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -44,6 +54,13 @@ CREATE TABLE IF NOT EXISTS verification_tokens (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  token      TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS rate_hits (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id    TEXT NOT NULL,
@@ -54,9 +71,10 @@ CREATE TABLE IF NOT EXISTS rate_hits (
 CREATE INDEX IF NOT EXISTS idx_rate_hits ON rate_hits(user_id, kind, created_at);
 
 CREATE TABLE IF NOT EXISTS telegram_links (
-  chat_id    INTEGER PRIMARY KEY,
-  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at INTEGER NOT NULL
+  chat_id           INTEGER PRIMARY KEY,
+  user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  active_project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+  created_at        INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS telegram_link_codes (
@@ -126,61 +144,95 @@ CREATE TABLE IF NOT EXISTS workspace_items (
 
 CREATE INDEX IF NOT EXISTS idx_workspace_project ON workspace_items(project_id);
 `;
-// Note: the projects(user_id) index is created in migrate(), after the column
-// is guaranteed to exist — an existing DB won't have it until ALTER runs.
 
-function open(): DatabaseSync {
-  mkdirSync(dirname(DB_PATH), { recursive: true });
-  const db = new DatabaseSync(DB_PATH);
-  // Rollback-journal + FULL sync: every commit lands directly in the single DB
-  // file. For a single-writer local app this is more durable than WAL, whose
-  // uncheckpointed commits can be lost if the dev-server process is killed hard.
-  db.exec("PRAGMA journal_mode = DELETE;");
-  db.exec("PRAGMA synchronous = FULL;");
-  db.exec("PRAGMA foreign_keys = ON;");
-  db.exec(SCHEMA);
-  migrate(db);
-  return db;
+/** Statements are applied one at a time; libSQL executes a single statement per call. */
+function schemaStatements(): string[] {
+  return SCHEMA.split(";")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => s + ";");
+}
+
+const g = globalThis as unknown as { __ideaforgeDb?: Promise<Client> };
+
+/** The shared client, initialised (schema + migrations) exactly once. */
+export function getDb(): Promise<Client> {
+  if (!g.__ideaforgeDb) g.__ideaforgeDb = init();
+  return g.__ideaforgeDb;
+}
+
+async function init(): Promise<Client> {
+  const client = createClient({
+    url: connectionUrl(),
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  });
+
+  for (const stmt of schemaStatements()) await client.execute(stmt);
+  await migrate(client);
+  return client;
+}
+
+// --- Tiny query helpers -----------------------------------------------------
+
+/** First matching row, or undefined. */
+export async function one<T>(sql: string, args: InArgs = []): Promise<T | undefined> {
+  const { rows } = await (await getDb()).execute({ sql, args });
+  return rows[0] as T | undefined;
+}
+
+/** All matching rows. */
+export async function many<T>(sql: string, args: InArgs = []): Promise<T[]> {
+  const { rows } = await (await getDb()).execute({ sql, args });
+  return rows as unknown as T[];
+}
+
+/** Execute a write. */
+export async function run(sql: string, args: InArgs = []): Promise<void> {
+  await (await getDb()).execute({ sql, args });
+}
+
+/** Column names of a table — used by the migrations below. */
+async function columns(client: Client, table: string): Promise<string[]> {
+  const { rows } = await client.execute(`PRAGMA table_info(${table})`);
+  return (rows as unknown as Row[]).map((r) => String(r.name));
 }
 
 /** Lightweight migrations for databases created before a column existed. */
-function migrate(db: DatabaseSync): void {
-  const projectCols = db.prepare("PRAGMA table_info(projects)").all() as Array<{ name: string }>;
-  if (!projectCols.some((c) => c.name === "user_id")) {
+async function migrate(db: Client): Promise<void> {
+  const projectCols = await columns(db, "projects");
+  if (projectCols.length && !projectCols.includes("user_id")) {
     // Older DB: add the ownership column. Existing rows become unowned (hidden).
-    db.exec("ALTER TABLE projects ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE");
+    await db.execute(
+      "ALTER TABLE projects ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE",
+    );
   }
-  // Safe now that the column is guaranteed to exist (fresh or migrated).
-  db.exec("CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id)");
+  await db.execute("CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id)");
 
-  if (!projectCols.some((c) => c.name === "share_token")) {
-    // Public read-only share links. UNIQUE can't be added via ALTER, so enforce
-    // uniqueness with an index instead.
-    db.exec("ALTER TABLE projects ADD COLUMN share_token TEXT");
+  if (projectCols.length && !projectCols.includes("share_token")) {
+    // UNIQUE can't be added via ALTER, so uniqueness comes from the index below.
+    await db.execute("ALTER TABLE projects ADD COLUMN share_token TEXT");
   }
-  db.exec(
+  await db.execute(
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_share ON projects(share_token) WHERE share_token IS NOT NULL",
   );
 
-  const userCols = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
-  if (!userCols.some((c) => c.name === "email_verified")) {
-    db.exec("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
-    // Accounts that predate email verification are grandfathered in as verified.
-    db.exec("UPDATE users SET email_verified = 1");
+  const userCols = await columns(db, "users");
+  if (userCols.length && !userCols.includes("email_verified")) {
+    await db.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0");
+    // Accounts predating verification are grandfathered in as verified.
+    await db.execute("UPDATE users SET email_verified = 1");
   }
-  if (!userCols.some((c) => c.name === "locale")) {
-    // Preferred output language (Settings → default language).
-    db.exec("ALTER TABLE users ADD COLUMN locale TEXT");
+  if (userCols.length && !userCols.includes("locale")) {
+    await db.execute("ALTER TABLE users ADD COLUMN locale TEXT");
   }
-  if (!userCols.some((c) => c.name === "notifications_seen_at")) {
-    // Watermark for the notifications badge (anything newer counts as unread).
-    db.exec("ALTER TABLE users ADD COLUMN notifications_seen_at INTEGER NOT NULL DEFAULT 0");
+  if (userCols.length && !userCols.includes("notifications_seen_at")) {
+    await db.execute(
+      "ALTER TABLE users ADD COLUMN notifications_seen_at INTEGER NOT NULL DEFAULT 0",
+    );
   }
-}
 
-const globalForDb = globalThis as unknown as { __ideaforgeDb?: DatabaseSync };
-
-export function getDb(): DatabaseSync {
-  if (!globalForDb.__ideaforgeDb) globalForDb.__ideaforgeDb = open();
-  return globalForDb.__ideaforgeDb;
+  const tgCols = await columns(db, "telegram_links");
+  if (tgCols.length && !tgCols.includes("active_project_id")) {
+    await db.execute("ALTER TABLE telegram_links ADD COLUMN active_project_id TEXT");
+  }
 }

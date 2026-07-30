@@ -4,6 +4,7 @@ import { discoverResources } from "@/lib/resources";
 import {
   deepResearchMessages,
   deepResearchQueries,
+  documentReviewMessages,
   keywordsFor,
   problemDiscoveryMessages,
   problemDiscoveryQueries,
@@ -17,6 +18,7 @@ import type {
   Citation,
   DiscoverInput,
   DiscoveredProblem,
+  DocumentReview,
   IdeaInput,
   KnowledgeCluster,
   Layer2Capability,
@@ -25,6 +27,8 @@ import type {
   ProjectPlan,
   ResearchReport,
   Resource,
+  ReviewPoint,
+  SectionNote,
   SolutionComparison,
   ResearchGap,
   TechStackItem,
@@ -50,6 +54,12 @@ export interface Layer2Service {
 
   /** Discover real-world problems worth solving in a domain. */
   discoverProblems(input: DiscoverInput, signal?: AbortSignal): Promise<ProblemDiscovery>;
+
+  /** Review an uploaded deck/document and suggest concrete improvements. */
+  reviewDocument(
+    input: { fileName: string; kind: "pptx" | "pdf"; sectionCount: number; text: string; truncated: boolean; locale?: string },
+    signal?: AbortSignal,
+  ): Promise<DocumentReview>;
 
   /** Project HUB + Knowledge Clustering: full build plan (Part 3). */
   projectHub(
@@ -125,6 +135,49 @@ class DefaultLayer2 implements Layer2Service {
         : [],
       gaps: Array.isArray(parsed.gaps) ? (parsed.gaps as ResearchGap[]) : [],
       demo: searcher.isMock || getProvider().isMock,
+    };
+  }
+
+  async reviewDocument(
+    input: {
+      fileName: string;
+      kind: "pptx" | "pdf";
+      sectionCount: number;
+      text: string;
+      truncated: boolean;
+      locale?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<DocumentReview> {
+    const provider = getProvider();
+    const raw = await provider.generateText({
+      messages: documentReviewMessages(
+        input.fileName,
+        input.kind,
+        input.sectionCount,
+        input.text,
+        input.locale,
+      ),
+      // Headroom so a detailed review is never cut mid-JSON.
+      maxTokens: 6000,
+      json: true,
+      signal,
+    });
+    const parsed = safeParse(raw);
+    const score = Number(parsed.score);
+
+    return {
+      fileName: input.fileName,
+      kind: input.kind,
+      sectionCount: input.sectionCount,
+      score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : 0,
+      verdict: asString(parsed.verdict, "No verdict was produced."),
+      strengths: asArray<ReviewPoint>(parsed.strengths),
+      improvements: asArray<ReviewPoint>(parsed.improvements),
+      missing: asArray<string>(parsed.missing),
+      sectionNotes: asArray<SectionNote>(parsed.sectionNotes),
+      truncated: input.truncated,
+      demo: provider.isMock,
     };
   }
 

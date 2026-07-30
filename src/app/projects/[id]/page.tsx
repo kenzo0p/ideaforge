@@ -32,7 +32,7 @@ export default async function ProjectPage({
   const { id } = await params;
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
-  const project = getProject(id, user.id);
+  const project = await getProject(id, user.id);
   if (!project) notFound();
 
   // ?tab=… drives which section renders; the sidebar and tab bar both link here.
@@ -40,12 +40,12 @@ export default async function ProjectPage({
   const activeTab: ProjectTabKey =
     requested && TAB_KEYS.includes(requested) ? requested : "validation";
 
-  const items = listWorkspaceItems(id);
+  const items = await listWorkspaceItems(id);
   const telegramConfigured = isTelegramConfigured();
-  const telegramLinked = telegramConfigured && isTelegramLinked(user.id);
-  const reminders = listRemindersForProject(id, user.id);
-  const reminderHistory = listReminderLogs(id, user.id);
-  const completedMilestones = getMilestoneProgress(id);
+  const telegramLinked = telegramConfigured && await isTelegramLinked(user.id);
+  const reminders = await listRemindersForProject(id, user.id);
+  const reminderHistory = await listReminderLogs(id, user.id);
+  const completedMilestones = await getMilestoneProgress(id);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-8">

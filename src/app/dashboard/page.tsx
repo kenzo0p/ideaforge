@@ -13,10 +13,10 @@ export const dynamic = "force-dynamic"; // always reflect the latest saved data
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
-  const projects = listProjects(user.id);
-  const doneCounts = milestoneCounts(user.id);
+  const projects = await listProjects(user.id);
+  const doneCounts = await milestoneCounts(user.id);
   const telegramConfigured = isTelegramConfigured();
-  const telegramLinked = telegramConfigured && isTelegramLinked(user.id);
+  const telegramLinked = telegramConfigured && await isTelegramLinked(user.id);
 
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-10">

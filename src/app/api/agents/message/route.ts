@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
   const user = await getCurrentUser();
   if (!user) return Response.json({ error: "Please sign in to use the agent." }, { status: 401 });
-  const limited = enforceRateLimit(user.id, "agent");
+  const limited = await enforceRateLimit(user.id, "agent");
   if (limited) return limited;
 
   try {

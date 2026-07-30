@@ -10,11 +10,12 @@ import { sendTelegramMessage } from "@/lib/agents/telegram";
 import { projectNextStep } from "@/lib/insights/next-step";
 
 // ---------------------------------------------------------------------------
-// Reminder scheduler.
+// Reminder delivery.
 //
-// Runs inside the Node server (started from instrumentation.ts). Every minute it
-// sends due nudges — each computed from the project's *current* state — to the
-// user's linked Telegram chat, then reschedules or retires the reminder.
+// `runDueReminders()` sends every nudge that is due — each computed from the
+// project's *current* state — then reschedules or retires it. Two callers:
+//   • a setInterval loop on a persistent server (startReminderScheduler)
+//   • the /api/cron/reminders route on serverless (Vercel Cron)
 // ---------------------------------------------------------------------------
 
 const g = globalThis as unknown as { __ideaforgeReminderScheduler?: boolean };
@@ -24,30 +25,31 @@ export function startReminderScheduler(): void {
   if (g.__ideaforgeReminderScheduler) return;
   g.__ideaforgeReminderScheduler = true;
   console.log("⏰ Reminder scheduler started.");
-  void tick();
-  setInterval(() => void tick(), TICK_MS);
+  void runDueReminders();
+  setInterval(() => void runDueReminders(), TICK_MS);
 }
 
-async function tick(): Promise<void> {
+/** Deliver all due reminders. Returns how many were processed. */
+export async function runDueReminders(): Promise<number> {
   const now = Date.now();
   let due;
   try {
-    due = dueReminders(now);
+    due = await dueReminders(now);
   } catch (err) {
-    console.error("Reminder scheduler query failed:", err);
-    return;
+    console.error("Reminder query failed:", err);
+    return 0;
   }
 
   for (const r of due) {
     try {
-      const project = getProject(r.projectId, r.userId);
+      const project = await getProject(r.projectId, r.userId);
       if (!project) {
-        deleteReminder(r.id, r.userId); // project gone — retire the reminder
+        await deleteReminder(r.id, r.userId); // project gone — retire the reminder
         continue;
       }
 
       const nextStep = projectNextStep(project);
-      const chatId = getChatIdForUser(r.userId);
+      const chatId = await getChatIdForUser(r.userId);
       let delivered = false;
       if (chatId !== null && process.env.TELEGRAM_BOT_TOKEN) {
         const text = `🔔 *Reminder — ${project.title}*\nNext step: ${nextStep}\n\nSend /status for the full picture.`;
@@ -59,10 +61,11 @@ async function tick(): Promise<void> {
         }
       }
       // Record the fire, then reschedule (recurring) or retire (one-off).
-      logReminderSent({ userId: r.userId, projectId: r.projectId, nextStep, delivered });
-      advanceReminder(r.id, r.intervalMs, now);
+      await logReminderSent({ userId: r.userId, projectId: r.projectId, nextStep, delivered });
+      await advanceReminder(r.id, r.intervalMs, now);
     } catch (err) {
       console.error("Reminder processing error:", err);
     }
   }
+  return due.length;
 }

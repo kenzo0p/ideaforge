@@ -31,8 +31,8 @@ export async function updateProfileAction(
   const name = String(formData.get("name") ?? "").trim() || null;
   const locale = String(formData.get("locale") ?? "en").trim();
 
-  updateUserName(user.id, name);
-  updateUserLocale(user.id, locale);
+  await updateUserName(user.id, name);
+  await updateUserLocale(user.id, locale);
   revalidatePath("/settings");
   return { success: "Profile updated." };
 }
@@ -47,13 +47,13 @@ export async function changePasswordAction(
 
   if (next.length < 8) return { error: "New password must be at least 8 characters." };
 
-  const full = getUserByEmail(user.email);
+  const full = await getUserByEmail(user.email);
   if (!full || !verifyPassword(current, full.passwordHash)) {
     return { error: "Current password is incorrect." };
   }
 
   // Invalidates every session, including this one — send the user back to sign in.
-  updateUserPassword(user.id, hashPassword(next));
+  await updateUserPassword(user.id, hashPassword(next));
   redirect("/sign-in?changed=1");
 }
 
@@ -67,12 +67,12 @@ export async function deleteAccountAction(
 
   if (confirm !== "DELETE") return { error: 'Type DELETE to confirm.' };
 
-  const full = getUserByEmail(user.email);
+  const full = await getUserByEmail(user.email);
   if (!full || !verifyPassword(password, full.passwordHash)) {
     return { error: "Password is incorrect." };
   }
 
   await endSession();
-  deleteUser(user.id); // cascades: projects, workspace items, reminders, links
+  await deleteUser(user.id); // cascades: projects, workspace items, reminders, links
   redirect("/");
 }

@@ -45,11 +45,9 @@ export default async function RootLayout({
   const user = await getCurrentUser();
   // Full list powers the ⌘K palette; the sidebar shows the first few.
   const projects = user
-    ? listProjects(user.id)
-        .slice(0, 50)
-        .map((p) => ({ id: p.id, title: p.title }))
+    ? (await listProjects(user.id)).slice(0, 50).map((p) => ({ id: p.id, title: p.title }))
     : [];
-  const unread = user ? unreadNotificationCount(user.id, user.notificationsSeenAt) : 0;
+  const unread = user ? await unreadNotificationCount(user.id, user.notificationsSeenAt) : 0;
   const { theme, collapsed } = await readPrefs();
 
   return (

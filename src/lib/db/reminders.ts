@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getDb } from "./index";
+import { many, one, run } from "./index";
 
 // ---------------------------------------------------------------------------
 // Reminders — scheduled nudges the Telegram bot sends for a project's next step.
@@ -40,21 +40,20 @@ function toReminder(r: ReminderRow): Reminder {
   };
 }
 
-export function createReminder(input: {
+export async function createReminder(input: {
   userId: string;
   projectId: string;
   label: string;
   intervalMs: number;
   firstDueAt: number;
-}): Reminder {
+}): Promise<Reminder> {
   const id = randomUUID();
   const now = Date.now();
-  getDb()
-    .prepare(
-      `INSERT INTO reminders (id, user_id, project_id, label, interval_ms, next_due_at, active, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
-    )
-    .run(id, input.userId, input.projectId, input.label, input.intervalMs, input.firstDueAt, now);
+  await run(
+    `INSERT INTO reminders (id, user_id, project_id, label, interval_ms, next_due_at, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+    [id, input.userId, input.projectId, input.label, input.intervalMs, input.firstDueAt, now],
+  );
   return {
     id,
     userId: input.userId,
@@ -67,36 +66,41 @@ export function createReminder(input: {
   };
 }
 
-export function listRemindersForProject(projectId: string, userId: string): Reminder[] {
-  const rows = getDb()
-    .prepare(
-      "SELECT * FROM reminders WHERE project_id = ? AND user_id = ? AND active = 1 ORDER BY next_due_at",
-    )
-    .all(projectId, userId) as ReminderRow[];
+export async function listRemindersForProject(
+  projectId: string,
+  userId: string,
+): Promise<Reminder[]> {
+  const rows = await many<ReminderRow>(
+    "SELECT * FROM reminders WHERE project_id = ? AND user_id = ? AND active = 1 ORDER BY next_due_at",
+    [projectId, userId],
+  );
   return rows.map(toReminder);
 }
 
 /** Active reminders that are due at or before `now`. */
-export function dueReminders(now: number): Reminder[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM reminders WHERE active = 1 AND next_due_at <= ?")
-    .all(now) as ReminderRow[];
+export async function dueReminders(now: number): Promise<Reminder[]> {
+  const rows = await many<ReminderRow>(
+    "SELECT * FROM reminders WHERE active = 1 AND next_due_at <= ?",
+    [now],
+  );
   return rows.map(toReminder);
 }
 
 /** After sending: reschedule a recurring reminder, or deactivate a one-off. */
-export function advanceReminder(id: string, intervalMs: number, now: number): void {
+export async function advanceReminder(
+  id: string,
+  intervalMs: number,
+  now: number,
+): Promise<void> {
   if (intervalMs > 0) {
-    getDb()
-      .prepare("UPDATE reminders SET next_due_at = ? WHERE id = ?")
-      .run(now + intervalMs, id);
+    await run("UPDATE reminders SET next_due_at = ? WHERE id = ?", [now + intervalMs, id]);
   } else {
-    getDb().prepare("UPDATE reminders SET active = 0 WHERE id = ?").run(id);
+    await run("UPDATE reminders SET active = 0 WHERE id = ?", [id]);
   }
 }
 
-export function deleteReminder(id: string, userId: string): void {
-  getDb().prepare("DELETE FROM reminders WHERE id = ? AND user_id = ?").run(id, userId);
+export async function deleteReminder(id: string, userId: string): Promise<void> {
+  await run("DELETE FROM reminders WHERE id = ? AND user_id = ?", [id, userId]);
 }
 
 // --- Reminder history ------------------------------------------------------
@@ -108,44 +112,42 @@ export interface ReminderLog {
   createdAt: number;
 }
 
-export function logReminderSent(input: {
-  userId: string;
-  projectId: string;
-  nextStep: string;
-  delivered: boolean;
-}): void {
-  getDb()
-    .prepare(
-      `INSERT INTO reminder_logs (id, user_id, project_id, next_step, delivered, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .run(randomUUID(), input.userId, input.projectId, input.nextStep, input.delivered ? 1 : 0, Date.now());
-}
-
 /** A nudge across all projects, with its project title — for the inbox. */
 export interface Notification extends ReminderLog {
   projectId: string;
   projectTitle: string;
 }
 
-export function listAllReminderLogs(userId: string, limit = 50): Notification[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT l.id, l.next_step, l.delivered, l.created_at, l.project_id, p.title
-         FROM reminder_logs l
-         JOIN projects p ON p.id = l.project_id
-        WHERE l.user_id = ?
-        ORDER BY l.created_at DESC
-        LIMIT ?`,
-    )
-    .all(userId, limit) as Array<{
+export async function logReminderSent(input: {
+  userId: string;
+  projectId: string;
+  nextStep: string;
+  delivered: boolean;
+}): Promise<void> {
+  await run(
+    `INSERT INTO reminder_logs (id, user_id, project_id, next_step, delivered, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [randomUUID(), input.userId, input.projectId, input.nextStep, input.delivered ? 1 : 0, Date.now()],
+  );
+}
+
+export async function listAllReminderLogs(userId: string, limit = 50): Promise<Notification[]> {
+  const rows = await many<{
     id: string;
     next_step: string;
     delivered: number;
     created_at: number;
     project_id: string;
     title: string;
-  }>;
+  }>(
+    `SELECT l.id, l.next_step, l.delivered, l.created_at, l.project_id, p.title
+       FROM reminder_logs l
+       JOIN projects p ON p.id = l.project_id
+      WHERE l.user_id = ?
+      ORDER BY l.created_at DESC
+      LIMIT ?`,
+    [userId, limit],
+  );
   return rows.map((r) => ({
     id: r.id,
     nextStep: r.next_step,
@@ -157,25 +159,29 @@ export function listAllReminderLogs(userId: string, limit = 50): Notification[] 
 }
 
 /** Count of nudges newer than the user's last visit to the inbox. */
-export function unreadNotificationCount(userId: string, seenAt: number): number {
-  const { c } = getDb()
-    .prepare("SELECT COUNT(*) AS c FROM reminder_logs WHERE user_id = ? AND created_at > ?")
-    .get(userId, seenAt) as { c: number };
-  return c;
+export async function unreadNotificationCount(userId: string, seenAt: number): Promise<number> {
+  const row = await one<{ c: number }>(
+    "SELECT COUNT(*) AS c FROM reminder_logs WHERE user_id = ? AND created_at > ?",
+    [userId, seenAt],
+  );
+  return row?.c ?? 0;
 }
 
-export function listReminderLogs(projectId: string, userId: string, limit = 8): ReminderLog[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT id, next_step, delivered, created_at FROM reminder_logs
-        WHERE project_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?`,
-    )
-    .all(projectId, userId, limit) as Array<{
+export async function listReminderLogs(
+  projectId: string,
+  userId: string,
+  limit = 8,
+): Promise<ReminderLog[]> {
+  const rows = await many<{
     id: string;
     next_step: string;
     delivered: number;
     created_at: number;
-  }>;
+  }>(
+    `SELECT id, next_step, delivered, created_at FROM reminder_logs
+      WHERE project_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?`,
+    [projectId, userId, limit],
+  );
   return rows.map((r) => ({
     id: r.id,
     nextStep: r.next_step,

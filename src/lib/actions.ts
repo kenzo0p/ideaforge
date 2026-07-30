@@ -16,6 +16,7 @@ import {
   type WorkspaceKind,
 } from "@/lib/db/projects";
 import { getCurrentUser } from "@/lib/auth/session";
+import { smartTitle } from "@/lib/format";
 import {
   createTelegramLinkCode,
   isTelegramLinked,
@@ -38,14 +39,16 @@ export async function saveProjectAction(
   input: Omit<SaveProjectInput, "userId"> & { id?: string },
 ): Promise<{ id: string }> {
   const userId = await requireUserId();
-  const title = input.title?.trim() || input.idea.slice(0, 60);
+  // Prefer the plan's product name once one exists; otherwise shorten the idea
+  // on a word boundary so titles never read like "…that fuses soil-mo".
+  const title = input.plan?.title?.trim() || smartTitle(input.title?.trim() || input.idea);
   if (input.id) {
-    updateProjectArtifacts(input.id, userId, { ...input, userId, title });
+    await updateProjectArtifacts(input.id, userId, { ...input, userId, title });
     revalidatePath("/dashboard");
     revalidatePath(`/projects/${input.id}`);
     return { id: input.id };
   }
-  const project = createProject({ ...input, userId, title });
+  const project = await createProject({ ...input, userId, title });
   revalidatePath("/dashboard");
   return { id: project.id };
 }
@@ -54,14 +57,14 @@ export async function renameProjectAction(id: string, title: string): Promise<vo
   const userId = await requireUserId();
   const clean = title.trim();
   if (!clean) return;
-  updateProjectTitle(id, userId, clean);
+  await updateProjectTitle(id, userId, clean);
   revalidatePath("/dashboard");
   revalidatePath(`/projects/${id}`);
 }
 
 export async function deleteProjectAction(id: string): Promise<void> {
   const userId = await requireUserId();
-  deleteProject(id, userId);
+  await deleteProject(id, userId);
   revalidatePath("/dashboard");
 }
 
@@ -74,15 +77,15 @@ export async function addWorkspaceItemAction(formData: FormData): Promise<void> 
   const body = String(formData.get("body") ?? "").trim() || null;
   if (!projectId || !title) return;
   // Ownership check: only add to a project the user owns.
-  if (!getProject(projectId, userId)) return;
+  if (!await getProject(projectId, userId)) return;
 
-  addWorkspaceItem({ projectId, kind, title, url, body });
+  await addWorkspaceItem({ projectId, kind, title, url, body });
   revalidatePath(`/projects/${projectId}`);
 }
 
 export async function deleteWorkspaceItemAction(id: string, projectId: string): Promise<void> {
   const userId = await requireUserId();
-  deleteWorkspaceItem(id, userId);
+  await deleteWorkspaceItem(id, userId);
   revalidatePath(`/projects/${projectId}`);
 }
 
@@ -91,34 +94,34 @@ export async function deleteWorkspaceItemAction(id: string, projectId: string): 
 /** Mint a one-time link code and return a t.me deep link to connect the bot. */
 export async function connectTelegramAction(): Promise<{ deepLink: string | null }> {
   const userId = await requireUserId();
-  const { code } = createTelegramLinkCode(userId);
+  const { code } = await createTelegramLinkCode(userId);
   const username = await getBotUsername();
   return { deepLink: username ? `https://t.me/${username}?start=${code}` : null };
 }
 
 export async function unlinkTelegramAction(): Promise<void> {
   const userId = await requireUserId();
-  unlinkTelegram(userId);
+  await unlinkTelegram(userId);
   revalidatePath("/dashboard");
 }
 
 export async function isTelegramLinkedAction(): Promise<boolean> {
   const userId = await requireUserId();
-  return isTelegramLinked(userId);
+  return await isTelegramLinked(userId);
 }
 
 // --- Public sharing --------------------------------------------------------
 
 export async function enableShareAction(projectId: string): Promise<{ token: string | null }> {
   const userId = await requireUserId();
-  const token = enableShare(projectId, userId);
+  const token = await enableShare(projectId, userId);
   revalidatePath(`/projects/${projectId}`);
   return { token };
 }
 
 export async function disableShareAction(projectId: string): Promise<void> {
   const userId = await requireUserId();
-  disableShare(projectId, userId);
+  await disableShare(projectId, userId);
   revalidatePath(`/projects/${projectId}`);
 }
 
@@ -131,8 +134,8 @@ export async function toggleMilestoneAction(
 ): Promise<void> {
   const userId = await requireUserId();
   // Ownership check before mutating progress.
-  if (!getProject(projectId, userId)) return;
-  setMilestoneDone(projectId, idx, done);
+  if (!await getProject(projectId, userId)) return;
+  await setMilestoneDone(projectId, idx, done);
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/dashboard");
 }
@@ -149,8 +152,8 @@ const CADENCES: Record<string, { label: string; intervalMs: number; firstDelayMs
 export async function createReminderAction(projectId: string, cadence: string): Promise<void> {
   const userId = await requireUserId();
   const c = CADENCES[cadence];
-  if (!c || !getProject(projectId, userId)) return;
-  createReminder({
+  if (!c || !await getProject(projectId, userId)) return;
+  await createReminder({
     userId,
     projectId,
     label: c.label,
@@ -162,6 +165,6 @@ export async function createReminderAction(projectId: string, cadence: string): 
 
 export async function deleteReminderAction(id: string, projectId: string): Promise<void> {
   const userId = await requireUserId();
-  deleteReminder(id, userId);
+  await deleteReminder(id, userId);
   revalidatePath(`/projects/${projectId}`);
 }

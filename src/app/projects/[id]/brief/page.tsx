@@ -16,7 +16,7 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
-  const project = getProject(id, user.id);
+  const project = await getProject(id, user.id);
   if (!project) notFound();
 
   const markdown = buildMarkdownBrief({

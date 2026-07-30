@@ -1,4 +1,9 @@
-import { getUserByChatId, linkTelegramChat } from "@/lib/db/telegram";
+import {
+  getActiveProjectId,
+  getUserByChatId,
+  linkTelegramChat,
+  setActiveProject,
+} from "@/lib/db/telegram";
 import { handleAgentMessage } from "./handler";
 import {
   deleteTelegramWebhook,
@@ -54,11 +59,11 @@ async function handleUpdate(update: TelegramUpdate): Promise<void> {
   // Linking: /start <code> (t.me deep link) or /link <code>.
   const linkMatch = text.match(/^\/(?:start|link)\s+(\S+)/i);
   if (linkMatch) {
-    const user = linkTelegramChat(linkMatch[1], chatId);
+    const user = await linkTelegramChat(linkMatch[1], chatId);
     await sendTelegramMessage(
       chatId,
       user
-        ? `✅ Connected to *${user.email}*.\nYou can now ask about your projects — try /projects, /status, or /next.`
+        ? `✅ Connected to *${user.email}*.\n\nSend /projects, then reply with a number to pick the project you want to work on.`
         : "⚠️ That link code is invalid or expired. Generate a new one from IdeaForge → Connect Telegram.",
     );
     return;
@@ -74,11 +79,14 @@ async function handleUpdate(update: TelegramUpdate): Promise<void> {
   }
 
   // Everything else: scope to the linked user (may be null → handler prompts to link).
-  const user = getUserByChatId(chatId);
+  const user = await getUserByChatId(chatId);
   const reply = await handleAgentMessage({
     text,
     userId: user?.id ?? null,
+    // The chat remembers which project it's talking about between messages.
+    projectId: user ? await getActiveProjectId(chatId) : null,
     channel: "telegram",
+    onSelectProject: (projectId) => void setActiveProject(chatId, projectId),
   });
   await sendTelegramMessage(chatId, reply);
 }

@@ -20,15 +20,17 @@ export interface AgentInput {
   projectId?: string | null;
   channel?: "console" | "telegram";
   locale?: string;
+  /** Chat channels call this to remember the project the user picked. */
+  onSelectProject?: (projectId: string) => void;
 }
 
 const HELP = `🤖 *IdeaForge Agent*
 I help you move projects forward. Try:
-• /projects — list your saved projects
-• /status — where a project stands
+• /projects — list your projects, then reply with a number to pick one
+• /status — where the current project stands
 • /next — the recommended next step
 • /plan — summarize the build plan
-• or just ask me anything about the project.`;
+• or just ask me anything about the current project.`;
 
 export async function handleAgentMessage(input: AgentInput): Promise<string> {
   const text = input.text.trim();
@@ -44,21 +46,41 @@ export async function handleAgentMessage(input: AgentInput): Promise<string> {
       : "🔒 Connect your IdeaForge account to ask about your projects. Sign in at the app to continue.";
   }
 
+  const projects = (await listProjects(input.userId)).slice(0, 10);
+
   if (cmd === "/projects" || cmd === "projects" || cmd.startsWith("list")) {
-    const projects = listProjects(input.userId);
     if (projects.length === 0) return "You have no saved projects yet. Create one in IdeaForge first.";
-    return (
-      "📁 *Your projects:*\n" +
-      projects.slice(0, 10).map((p, i) => `${i + 1}. ${p.title}`).join("\n")
-    );
+    const current = input.projectId;
+    const lines = projects
+      .map((p, i) => `${i + 1}. ${p.id === current ? "*" + p.title + "* ← current" : p.title}`)
+      .join("\n");
+    return `📁 *Your projects:*\n${lines}\n\nReply with a number (or /use 2) to pick one.`;
   }
 
-  const project = input.projectId ? getProject(input.projectId, input.userId) : null;
+  // Pick a project by list position: "2" or "/use 2".
+  const pick = cmd.match(/^(?:\/use\s+)?(\d{1,2})$/);
+  if (pick && input.onSelectProject) {
+    const chosen = projects[Number(pick[1]) - 1];
+    if (!chosen) {
+      return `That number isn't on the list. Send /projects to see your ${projects.length} project${projects.length === 1 ? "" : "s"}.`;
+    }
+    input.onSelectProject(chosen.id);
+    const full = await getProject(chosen.id, input.userId);
+    return full
+      ? `✅ Now working on *${full.title}*.\n\n${statusReply(full)}`
+      : `✅ Now working on *${chosen.title}*.`;
+  }
+
+  const project = input.projectId ? await getProject(input.projectId, input.userId) : null;
 
   if (!project) {
-    if (cmd.startsWith("/")) return "Open a project first, then I can answer /status, /next, and /plan for it.";
-    // General question without a project scope.
-    return "Pick a project (open it in IdeaForge) and I'll answer questions grounded in its research and plan. Meanwhile, send /projects to see what you've saved.";
+    const hint =
+      projects.length > 0
+        ? "Send /projects and reply with a number to pick one."
+        : "You have no saved projects yet — create one in IdeaForge first.";
+    return cmd.startsWith("/")
+      ? `No project selected. ${hint}`
+      : `I answer questions about one project at a time. ${hint}`;
   }
 
   if (cmd === "/status" || cmd === "status") return statusReply(project);

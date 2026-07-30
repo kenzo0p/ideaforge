@@ -26,7 +26,7 @@ export function sessionCookieOptions() {
 
 /** Create a session for a user and set the cookie. */
 export async function startSession(userId: string): Promise<void> {
-  const { token } = createSession(userId);
+  const { token } = await createSession(userId);
   const jar = await cookies();
   jar.set(COOKIE, token, sessionCookieOptions());
 }
@@ -35,7 +35,7 @@ export async function startSession(userId: string): Promise<void> {
 export async function endSession(): Promise<void> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
-  if (token) destroySession(token);
+  if (token) await destroySession(token);
   jar.delete(COOKIE);
 }
 
@@ -44,5 +44,5 @@ export async function getCurrentUser(): Promise<User | null> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
-  return getUserForSession(token);
+  return await getUserForSession(token);
 }

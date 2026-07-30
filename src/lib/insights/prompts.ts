@@ -117,6 +117,45 @@ Provide 2–4 existingSolutions and 2–4 gaps. Respond in locale "${locale}".`,
   ];
 }
 
+/**
+ * Deck/document review. The model sees the extracted text of the user's own
+ * pitch deck or write-up and returns concrete, actionable improvements.
+ */
+export function documentReviewMessages(
+  fileName: string,
+  kind: "pptx" | "pdf",
+  sectionCount: number,
+  text: string,
+  locale = "en",
+): ChatMessage[] {
+  const unit = kind === "pptx" ? "slide" : "page";
+  return [
+    {
+      role: "system",
+      content: `[[TASK:document-review]]
+You are iNSIGHTS reviewing a student's ${kind === "pptx" ? "pitch deck" : "project document"}
+("${fileName}", ${sectionCount} ${unit}s). Give the honest, specific feedback a
+demanding but supportive judge would give. Prefer concrete rewrites over vague
+advice ("replace 'we help students' with the specific job-to-be-done" beats
+"be clearer"). Judge the CONTENT — ignore that formatting/visuals aren't visible
+in extracted text, and never criticise missing images or design.
+
+Return a STRICT JSON object (no markdown fences):
+{
+  "score": 0-100,
+  "verdict": "one honest sentence on how close this is to presentation-ready",
+  "strengths": [{ "title": "short label", "detail": "what works and why" }],
+  "improvements": [{ "title": "short label", "detail": "the specific change to make" }],
+  "missing": ["a section or claim a judge will expect but can't find"],
+  "sectionNotes": [{ "index": 1, "issue": "what's weak on this ${unit}", "fix": "the concrete fix" }]
+}
+Provide 2–4 strengths, 3–6 improvements, 2–5 missing items, and notes for the
+3–6 weakest ${unit}s only. Respond in locale "${locale}".`,
+    },
+    { role: "user", content: `DOCUMENT TEXT:\n${text}` },
+  ];
+}
+
 /** Searches used to ground problem discovery in current, real-world signals. */
 export function problemDiscoveryQueries(domain: string): string[] {
   const d = domain.trim() || "students and everyday life";

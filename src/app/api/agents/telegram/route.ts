@@ -1,13 +1,20 @@
 import { handleAgentMessage } from "@/lib/agents/handler";
 import { sendTelegramMessage, type TelegramUpdate } from "@/lib/agents/telegram";
+import {
+  getActiveProjectId,
+  getUserByChatId,
+  linkTelegramChat,
+  setActiveProject,
+} from "@/lib/db/telegram";
 
 export const runtime = "nodejs";
 
-// POST /api/agents/telegram — Telegram webhook.
+// POST /api/agents/telegram — Telegram webhook (the serverless counterpart to
+// long-polling; identical behaviour, different transport).
 //
-// Set the webhook to this URL and secure it with TELEGRAM_WEBHOOK_SECRET:
+// Register it once after deploying:
 //   curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=<PUBLIC_URL>/api/agents/telegram&secret_token=<SECRET>"
-// Telegram sends that secret back in the X-Telegram-Bot-Api-Secret-Token header.
+// Telegram echoes that secret back in X-Telegram-Bot-Api-Secret-Token.
 export async function POST(req: Request) {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
   if (secret && req.headers.get("x-telegram-bot-api-secret-token") !== secret) {
@@ -25,15 +32,43 @@ export async function POST(req: Request) {
   const text = message?.text?.trim();
   const chatId = message?.chat?.id;
 
-  // Telegram expects a 200 quickly; ack even when there's nothing to do.
+  // Telegram expects a fast 200; ack even when there's nothing to do.
   if (!text || chatId === undefined) return Response.json({ ok: true });
 
   try {
-    // Note: project scoping per Telegram chat would be persisted per session;
-    // for now the bot answers commands and general guidance.
-    const reply = await handleAgentMessage({ text, channel: "telegram" });
+    // Linking: /start <code> (t.me deep link) or /link <code>.
+    const linkMatch = text.match(/^\/(?:start|link)\s+(\S+)/i);
+    if (linkMatch) {
+      const user = await linkTelegramChat(linkMatch[1], chatId);
+      await sendTelegramMessage(
+        chatId,
+        user
+          ? `✅ Connected to *${user.email}*.\n\nSend /projects, then reply with a number to pick the project you want to work on.`
+          : "⚠️ That link code is invalid or expired. Generate a new one from IdeaForge → Connect Telegram.",
+      );
+      return Response.json({ ok: true });
+    }
+
+    if (/^\/start$/i.test(text)) {
+      await sendTelegramMessage(
+        chatId,
+        "👋 *IdeaForge Agent*\nConnect your account to get started: open IdeaForge → *Connect Telegram* and tap the link. Then send /projects.",
+      );
+      return Response.json({ ok: true });
+    }
+
+    const user = await getUserByChatId(chatId);
+    const reply = await handleAgentMessage({
+      text,
+      userId: user?.id ?? null,
+      // The chat remembers which project it's talking about between messages.
+      projectId: user ? await getActiveProjectId(chatId) : null,
+      channel: "telegram",
+      onSelectProject: (projectId) => void setActiveProject(chatId, projectId),
+    });
     await sendTelegramMessage(chatId, reply);
-  } catch {
+  } catch (err) {
+    console.error("Telegram webhook error:", err);
     await sendTelegramMessage(chatId, "⚠️ Something went wrong. Try again.").catch(() => {});
   }
 

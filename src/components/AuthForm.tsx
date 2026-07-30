@@ -69,6 +69,14 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
           />
         </Field>
 
+        {!isSignUp && (
+          <p className="text-right text-xs">
+            <Link href="/forgot-password" className="text-muted hover:text-brand hover:underline">
+              Forgot password?
+            </Link>
+          </p>
+        )}
+
         {state.error && (
           <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-500">
             {state.error}

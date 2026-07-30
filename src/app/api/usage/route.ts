@@ -10,7 +10,7 @@ export async function GET() {
   if (auth instanceof Response) return auth;
 
   const { limit, windowMs } = LIMITS.copilot;
-  const usage = getUsage(auth.id, "copilot", limit, windowMs);
+  const usage = await getUsage(auth.id, "copilot", limit, windowMs);
 
   return Response.json(usage, { headers: { "Cache-Control": "no-store" } });
 }
