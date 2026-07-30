@@ -238,7 +238,7 @@ export default function IdeaConsole({
 
   const modeBtn = (active: boolean) =>
     `inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
-      active ? "bg-brand text-white shadow-sm" : "text-muted hover:text-foreground"
+      active ? "bg-brand-solid text-on-brand shadow-sm" : "text-muted hover:text-foreground"
     }`;
 
   return (
@@ -299,7 +299,7 @@ export default function IdeaConsole({
               <select
                 value={locale}
                 onChange={(e) => setLocale(e.target.value)}
-                className="rounded-md border border-border bg-card px-1.5 py-0.5 text-xs outline-none focus:border-brand/60"
+                className="rounded-md border border-border-strong bg-card px-1.5 py-0.5 text-xs outline-none focus:border-brand/60"
                 aria-label="Output language"
               >
                 {LANGUAGES.map((l) => (
@@ -322,7 +322,7 @@ export default function IdeaConsole({
             <button
               type="submit"
               disabled={!idea.trim()}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-solid px-3.5 py-1.5 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90 disabled:opacity-40"
             >
               Validate idea <ArrowUp className="size-4" />
             </button>
@@ -377,14 +377,14 @@ export default function IdeaConsole({
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
               </div>
               {status === "done" && research === "idle" && (
-                <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-background/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted">
                     <span className="font-medium text-foreground">Next →</span> back this up with
                     real research from across the web.
                   </p>
                   <button
                     onClick={runResearch}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-solid px-3.5 py-1.5 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90"
                   >
                     <Search className="size-4" /> Run DeepSearch
                   </button>
@@ -448,7 +448,7 @@ export default function IdeaConsole({
           {savedId && (
             <button
               onClick={() => router.push(`/projects/${savedId}`)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-500 transition hover:bg-emerald-500/20"
+              className="inline-flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-3 py-1.5 text-sm font-medium text-success transition hover:bg-success/20"
             >
               <Check className="size-4" /> Open
             </button>
@@ -456,7 +456,7 @@ export default function IdeaConsole({
           <button
             onClick={saveProject}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-full bg-brand px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-full bg-brand-solid px-4 py-1.5 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90 disabled:opacity-50"
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Bookmark className="size-4" />}
             {!isAuthed ? "Sign in to save" : savedId ? "Update" : "Save"}
@@ -493,7 +493,7 @@ function EmptyStep({
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted">{body}</p>
       <button
         onClick={onAction}
-        className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+        className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-solid px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90"
       >
         <Icon className="size-4" /> {actionLabel}
       </button>
@@ -512,7 +512,7 @@ function LoadingStep({ text }: { text: string }) {
 
 function ErrorStep({ message, onRetry }: { message: string | null; onRetry: () => void }) {
   return (
-    <div className="rounded-2xl border border-rose-500/40 bg-rose-500/5 p-5 text-sm text-rose-500 shadow-sm">
+    <div className="rounded-2xl border border-danger/40 bg-danger/5 p-5 text-sm text-danger shadow-sm">
       ⚠️ {message}
       <button onClick={onRetry} className="ml-2 underline hover:no-underline">
         Retry

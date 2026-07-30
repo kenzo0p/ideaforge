@@ -38,7 +38,7 @@ export default function ProjectReminders({
       </p>
 
       {!telegramLinked && (
-        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
+        <div className="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning dark:text-warning">
           <Send className="mr-1 inline size-3.5" />
           Connect Telegram from your{" "}
           <Link href="/dashboard" className="font-medium underline">
@@ -70,7 +70,7 @@ export default function ProjectReminders({
           {reminders.map((r) => (
             <li
               key={r.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background/40 p-3"
+              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface p-3"
             >
               <div className="text-sm">
                 <span className="font-medium">{r.label}</span>
@@ -81,7 +81,7 @@ export default function ProjectReminders({
               <button
                 onClick={() => startTransition(() => deleteReminderAction(r.id, projectId))}
                 disabled={pending}
-                className="shrink-0 rounded-md p-1 text-muted transition hover:text-rose-500"
+                className="shrink-0 rounded-md p-1 text-muted transition hover:text-danger"
                 aria-label="Cancel reminder"
               >
                 {pending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
@@ -102,7 +102,7 @@ export default function ProjectReminders({
               <li key={h.id} className="flex items-start gap-2 text-xs">
                 <span
                   className={`mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full ${
-                    h.delivered ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-500"
+                    h.delivered ? "bg-success/15 text-success" : "bg-warning/15 text-warning"
                   }`}
                   title={h.delivered ? "Delivered to Telegram" : "Not delivered (Telegram not linked)"}
                 >

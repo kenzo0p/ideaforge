@@ -73,12 +73,12 @@ export default function DiscoverPanel({
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
             placeholder="e.g. rural healthcare, student productivity… (or leave blank)"
-            className="flex-1 rounded-lg border border-border bg-background/40 px-3 py-2 text-sm outline-none focus:border-brand/60"
+            className="flex-1 rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm outline-none focus:border-brand/60"
           />
           <button
             type="submit"
             disabled={status === "loading"}
-            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-brand-solid px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90 disabled:opacity-50"
           >
             {status === "loading" ? (
               <Loader2 className="size-4 animate-spin" />
@@ -111,7 +111,7 @@ export default function DiscoverPanel({
         </div>
       )}
       {status === "error" && (
-        <div className="mt-5 rounded-2xl border border-rose-500/40 bg-rose-500/5 p-5 text-sm text-rose-500 shadow-sm">
+        <div className="mt-5 rounded-2xl border border-danger/40 bg-danger/5 p-5 text-sm text-danger shadow-sm">
           ⚠️ {error}
         </div>
       )}
@@ -124,7 +124,7 @@ export default function DiscoverPanel({
               Problems worth solving{result.domain !== "general" ? ` in ${result.domain}` : ""}
             </div>
             {result.demo && (
-              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-500">
+              <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs text-warning">
                 Demo data
               </span>
             )}
@@ -135,7 +135,7 @@ export default function DiscoverPanel({
           ) : (
             <div className="space-y-3">
               {result.problems.map((p, i) => (
-                <div key={i} className="rounded-xl border border-border bg-background/40 p-4">
+                <div key={i} className="rounded-xl border border-border bg-surface p-4">
                   <div className="font-semibold">{p.title}</div>
                   <p className="mt-1 text-sm text-muted">{p.description}</p>
                   <div className="mt-2 grid gap-1 text-xs text-muted sm:grid-cols-2">
@@ -162,7 +162,7 @@ export default function DiscoverPanel({
                     </p>
                     <button
                       onClick={() => onForge(p.starterIdea)}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-solid px-3 py-1.5 text-xs font-semibold text-on-brand transition hover:opacity-90"
                     >
                       <Sparkles className="size-3.5" /> Forge this idea <ArrowRight className="size-3.5" />
                     </button>

@@ -50,7 +50,7 @@ export default function ProjectCard({
           <span
             key={label}
             className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-              done ? "bg-emerald-500/15 text-emerald-500" : "border border-border text-muted"
+              done ? "bg-success/15 text-success" : "border border-border text-muted"
             }`}
           >
             {done ? "✓ " : ""}
@@ -71,7 +71,7 @@ export default function ProjectCard({
           <div className="h-1 w-full overflow-hidden rounded-full bg-border">
             <div
               className={`h-full rounded-full transition-all ${
-                pct === 100 ? "bg-emerald-500" : "bg-brand"
+                pct === 100 ? "bg-success" : "bg-brand-solid"
               }`}
               style={{ width: `${pct}%` }}
             />

@@ -31,14 +31,14 @@ export default function ConnectTelegram({ linked }: { linked: boolean }) {
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-sky-500/15 text-sky-500">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-info/15 text-info">
             <Send className="size-4" />
           </div>
           <div>
             <div className="flex items-center gap-2 text-sm font-semibold">
               Telegram Agent
               {isLinked && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-500">
+                <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
                   <Check className="size-3" /> Connected
                 </span>
               )}
@@ -53,7 +53,7 @@ export default function ConnectTelegram({ linked }: { linked: boolean }) {
           <button
             onClick={unlink}
             disabled={pending}
-            className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition hover:text-rose-500 disabled:opacity-50"
+            className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted transition hover:text-danger disabled:opacity-50"
           >
             {pending ? <Loader2 className="size-3.5 animate-spin" /> : "Disconnect"}
           </button>
@@ -61,7 +61,7 @@ export default function ConnectTelegram({ linked }: { linked: boolean }) {
           <button
             onClick={connect}
             disabled={pending}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-solid px-3 py-1.5 text-xs font-semibold text-on-brand transition hover:opacity-90 disabled:opacity-50"
           >
             {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
             Connect
@@ -70,7 +70,7 @@ export default function ConnectTelegram({ linked }: { linked: boolean }) {
       </div>
 
       {deepLink && !isLinked && (
-        <div className="mt-3 rounded-lg border border-border bg-background/40 p-3 text-xs">
+        <div className="mt-3 rounded-lg border border-border bg-surface p-3 text-xs">
           <p className="mb-2 text-muted">
             A Telegram tab should have opened. If not, tap the link, then press{" "}
             <span className="font-medium text-foreground">Start</span> in the chat:

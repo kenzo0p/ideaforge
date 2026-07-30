@@ -22,7 +22,7 @@ export default async function Home({
       {/* Header */}
       <header className="mb-10">
         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted">
-          <span className="size-1.5 rounded-full bg-accent" />
+          <span className="size-1.5 rounded-full bg-success" />
           Powered by iNSIGHTS Layer 2
         </div>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
@@ -40,12 +40,12 @@ export default async function Home({
 
       {/* Demo-mode banner — honest signal that no LLM is connected yet. */}
       {isAuthed && isDemo && (
-        <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
+        <div className="mb-4 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning dark:text-warning">
           <span className="font-semibold">⚠️ Demo mode —</span> no language model is connected, so
           analysis, plans, and clusters are <strong>generic templates, not tailored to your idea</strong>.
           Web search, GitHub, datasets, and papers are live. Add an{" "}
-          <code className="rounded bg-amber-500/20 px-1">OPENAI_API_KEY</code> or{" "}
-          <code className="rounded bg-amber-500/20 px-1">ANTHROPIC_API_KEY</code> to go fully live.
+          <code className="rounded bg-warning/20 px-1">OPENAI_API_KEY</code> or{" "}
+          <code className="rounded bg-warning/20 px-1">ANTHROPIC_API_KEY</code> to go fully live.
         </div>
       )}
 
@@ -86,7 +86,7 @@ export default async function Home({
                   </div>
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                      isLive ? "bg-accent/15 text-accent" : "border border-border text-muted"
+                      isLive ? "bg-success/15 text-success" : "border border-border text-muted"
                     }`}
                   >
                     {isLive ? "Live" : `Part ${cap.part}`}

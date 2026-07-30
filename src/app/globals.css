@@ -17,58 +17,145 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Colour tokens.
+ *
+ * Every colour in the app comes from here — components never reach for a raw
+ * palette value, so both themes stay in step and contrast is verifiable.
+ * `npm run check:contrast` parses this block and asserts WCAG ratios.
+ *
+ * Roles, not shades:
+ *   surfaces   background < sidebar/card < surface < hover   (stacking order)
+ *   text       foreground (primary) → muted (secondary)
+ *   lines      border (decorative) / border-strong (control edges, needs 3:1)
+ *   brand      brand      = brand as *text or icon* on a surface — flips per theme
+ *              brand-solid = brand as a *fill*, always carries white (on-brand)
+ *   semantic   success | warning | danger | info — per-theme so they stay legible
+ *              on light backgrounds too, which single hardcoded shades did not.
+ * ------------------------------------------------------------------------- */
+
 /* Light tokens — the default */
 :root {
-  --background: #f7f7fb;
-  --foreground: #1a1922;
+  --background: #f4f4f9;
   --card: #ffffff;
   --sidebar: #ffffff;
-  --border: #e7e6ef;
-  --muted: #6b6a7b;
-  --brand: #6d4aff;
-  --brand-2: #9333ea;
-  --accent: #0891b2;
+  --surface: #f0f0f6;
+  --hover: #ebeaf3;
+
+  --foreground: #15141d;
+  --muted: #5b5a6e;
+
+  --border: #e4e3ee;
+  --border-strong: #8a879f;
+
+  --brand: #5b3ce0;
+  --brand-solid: #5b3ce0;
+  --brand-hover: #4a2fc4;
+  --brand-2: #8b2ee0;
+  --brand-2-solid: #9333ea;
+  --on-brand: #ffffff;
+  --on-status: #ffffff;
+
+  --success: #065f46;
+  --warning: #92400e;
+  --danger: #9f1239;
+  --info: #075985;
 }
 
-/* Dark tokens, shared by the OS-preference and explicit-choice cases */
+/* Dark tokens, shared by the OS-preference and explicit-choice cases.
+   Kept in one place so the two selectors can never drift apart. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light):not(.dark) {
-    --background: #0a0a0f;
-    --foreground: #eaeaf1;
-    --card: #14141f;
-    --sidebar: #0e0e17;
-    --border: #262637;
-    --muted: #9a9ab0;
-    --brand: #8b6dff;
+    --background: #0b0a11;
+    --card: #15141f;
+    --sidebar: #0f0e17;
+    --surface: #1c1b28;
+    --hover: #242233;
+
+    --foreground: #eceaf4;
+    --muted: #a5a2ba;
+
+    --border: #2a2839;
+    --border-strong: #6b6884;
+
+    --brand: #a78bfa;
+    --brand-solid: #6242e6;
+    --brand-hover: #7355f0;
     --brand-2: #c084fc;
-    --accent: #22d3ee;
+    --brand-2-solid: #8b3ae8;
+    --on-brand: #ffffff;
+    --on-status: #0b0a11;
+
+    --success: #34d399;
+    --warning: #fbbf24;
+    --danger: #fb7185;
+    --info: #38bdf8;
   }
 }
 
 :root.dark {
-  --background: #0a0a0f;
-  --foreground: #eaeaf1;
-  --card: #14141f;
-  --sidebar: #0e0e17;
-  --border: #262637;
-  --muted: #9a9ab0;
-  --brand: #8b6dff;
+  --background: #0b0a11;
+  --card: #15141f;
+  --sidebar: #0f0e17;
+  --surface: #1c1b28;
+  --hover: #242233;
+
+  --foreground: #eceaf4;
+  --muted: #a5a2ba;
+
+  --border: #2a2839;
+  --border-strong: #6b6884;
+
+  --brand: #a78bfa;
+  --brand-solid: #6242e6;
+  --brand-hover: #7355f0;
   --brand-2: #c084fc;
-  --accent: #22d3ee;
+  --brand-2-solid: #8b3ae8;
+  --on-brand: #ffffff;
+  --on-status: #0b0a11;
+
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #fb7185;
+  --info: #38bdf8;
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-sidebar: var(--sidebar);
-  --color-border: var(--border);
+  --color-surface: var(--surface);
+  --color-hover: var(--hover);
+
+  --color-foreground: var(--foreground);
   --color-muted: var(--muted);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
   --color-brand: var(--brand);
+  --color-brand-solid: var(--brand-solid);
+  --color-brand-hover: var(--brand-hover);
   --color-brand-2: var(--brand-2);
-  --color-accent: var(--accent);
+  --color-brand-2-solid: var(--brand-2-solid);
+  --color-on-brand: var(--on-brand);
+  --color-on-status: var(--on-status);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+/* One visible focus treatment for every interactive element. Keyboard users get
+   a ring that clears 3:1 against both card and page background. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
 }
 
 body {

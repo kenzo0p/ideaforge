@@ -64,13 +64,13 @@ export default function AgentConsole({ projectId }: { projectId: string }) {
 
       <div
         ref={scrollRef}
-        className="mb-3 max-h-80 space-y-3 overflow-y-auto rounded-xl border border-border bg-background/40 p-3"
+        className="mb-3 max-h-80 space-y-3 overflow-y-auto rounded-xl border border-border bg-surface p-3"
       >
         {messages.map((m, i) => (
           <div key={i} className={`flex gap-2 ${m.role === "user" ? "flex-row-reverse" : ""}`}>
             <div
               className={`flex size-6 shrink-0 items-center justify-center rounded-full ${
-                m.role === "user" ? "bg-brand text-white" : "bg-brand/15 text-brand"
+                m.role === "user" ? "bg-brand-solid text-on-brand" : "bg-brand/15 text-brand"
               }`}
             >
               {m.role === "user" ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
@@ -78,7 +78,7 @@ export default function AgentConsole({ projectId }: { projectId: string }) {
             <div
               className={`prose-insights max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
                 m.role === "user"
-                  ? "bg-brand text-white"
+                  ? "bg-brand-solid text-on-brand"
                   : "border border-border bg-card"
               }`}
             >
@@ -117,12 +117,12 @@ export default function AgentConsole({ projectId }: { projectId: string }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask the agent about this project…"
-          className="flex-1 rounded-lg border border-border bg-background/40 px-3 py-2 text-sm outline-none focus:border-brand/60"
+          className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand/60"
         />
         <button
           type="submit"
           disabled={pending || !input.trim()}
-          className="inline-flex items-center justify-center rounded-lg bg-brand px-3 py-2 text-white transition hover:opacity-90 disabled:opacity-40"
+          className="inline-flex items-center justify-center rounded-lg bg-brand-solid px-3 py-2 text-on-brand transition hover:opacity-90 disabled:opacity-40"
           aria-label="Send"
         >
           <Send className="size-4" />

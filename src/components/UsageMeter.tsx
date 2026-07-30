@@ -49,7 +49,7 @@ export default function UsageMeter() {
 
   const pct = Math.min(100, Math.round((usage.used / usage.limit) * 100));
   const tone =
-    pct >= 90 ? "bg-rose-500" : pct >= 60 ? "bg-amber-500" : "bg-brand";
+    pct >= 90 ? "bg-danger" : pct >= 60 ? "bg-warning" : "bg-brand-solid";
 
   return (
     <div className="px-3 py-2" title={`${usage.used} of ${usage.limit} copilot requests this minute`}>

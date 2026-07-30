@@ -15,7 +15,7 @@ export default function DeleteProjectButton({ id }: { id: string }) {
         <button
           onClick={() => startTransition(() => deleteProjectAction(id))}
           disabled={pending}
-          className="inline-flex items-center gap-1 rounded-md bg-rose-500/15 px-2 py-1 font-medium text-rose-500 hover:bg-rose-500/25"
+          className="inline-flex items-center gap-1 rounded-md bg-danger/15 px-2 py-1 font-medium text-danger hover:bg-danger/25"
         >
           {pending ? <Loader2 className="size-3 animate-spin" /> : <Trash2 className="size-3" />}
           Confirm
@@ -33,7 +33,7 @@ export default function DeleteProjectButton({ id }: { id: string }) {
   return (
     <button
       onClick={() => setConfirming(true)}
-      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition hover:text-rose-500"
+      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition hover:text-danger"
       aria-label="Delete project"
     >
       <Trash2 className="size-3.5" />

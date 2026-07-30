@@ -13,7 +13,7 @@ function SubmitButton({ label }: { label: string }) {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-solid px-4 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90 disabled:opacity-50"
     >
       {pending && <Loader2 className="size-4 animate-spin" />}
       {label}
@@ -78,7 +78,7 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         )}
 
         {state.error && (
-          <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-500">
+          <div className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
             {state.error}
             {state.needsVerification && state.email && (
               <div className="mt-1.5 text-foreground/80">
@@ -105,7 +105,7 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-border bg-background/40 px-3 py-2 text-sm outline-none focus:border-brand/60";
+  "w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm outline-none focus:border-brand/60";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

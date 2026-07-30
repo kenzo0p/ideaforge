@@ -40,7 +40,7 @@ export default function ThemeToggle({
     <button
       onClick={() => apply(next)}
       title={`Theme: ${label} — click for ${next}`}
-      className={`inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-background hover:text-foreground ${
+      className={`inline-flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-hover hover:text-foreground ${
         collapsed ? "justify-center" : ""
       }`}
     >

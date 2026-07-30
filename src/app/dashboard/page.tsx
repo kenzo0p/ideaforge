@@ -34,7 +34,7 @@ export default async function DashboardPage() {
         </div>
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-solid px-3.5 py-2 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90"
         >
           <Plus className="size-4" /> New idea
         </Link>
@@ -66,7 +66,7 @@ function EmptyState() {
         <span className="absolute right-1 top-0 flex size-14 rotate-[8deg] items-center justify-center rounded-2xl border border-border bg-card shadow-sm">
           <Rocket className="size-6 text-muted" />
         </span>
-        <span className="absolute bottom-0 left-1/2 flex size-16 -translate-x-1/2 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-white shadow-md">
+        <span className="absolute bottom-0 left-1/2 flex size-16 -translate-x-1/2 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-solid to-brand-2-solid text-on-brand shadow-md">
           <Sparkles className="size-7" />
         </span>
       </div>
@@ -77,7 +77,7 @@ function EmptyState() {
       </p>
       <Link
         href="/"
-        className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+        className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-brand-solid px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90"
       >
         <Plus className="size-4" /> Start an idea
       </Link>

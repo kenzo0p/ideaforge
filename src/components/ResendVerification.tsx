@@ -8,7 +8,7 @@ export default function ResendVerification({ email }: { email: string }) {
   const [pending, startTransition] = useTransition();
   const [sent, setSent] = useState(false);
 
-  if (sent) return <span className="text-emerald-500">Sent — check your inbox.</span>;
+  if (sent) return <span className="text-success">Sent — check your inbox.</span>;
 
   return (
     <button

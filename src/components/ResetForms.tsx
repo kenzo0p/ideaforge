@@ -11,7 +11,7 @@ import {
 } from "@/lib/auth/reset-actions";
 
 const input =
-  "w-full rounded-lg border border-border bg-background/40 px-3 py-2 text-sm outline-none focus:border-brand/60";
+  "w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm outline-none focus:border-brand/60";
 
 function Submit({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -19,7 +19,7 @@ function Submit({ label }: { label: string }) {
     <button
       type="submit"
       disabled={pending}
-      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+      className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-solid px-4 py-2.5 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90 disabled:opacity-50"
     >
       {pending && <Loader2 className="size-4 animate-spin" />}
       {label}
@@ -30,7 +30,7 @@ function Submit({ label }: { label: string }) {
 function ErrorNote({ error }: { error?: string }) {
   if (!error) return null;
   return (
-    <p className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-500">
+    <p className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
       {error}
     </p>
   );
@@ -52,8 +52,8 @@ export function ForgotPasswordForm() {
         </p>
 
         {state.devToken && (
-          <div className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-left text-sm">
-            <p className="mb-2 font-semibold text-amber-600 dark:text-amber-400">
+          <div className="mt-4 rounded-xl border border-warning/40 bg-warning/10 p-4 text-left text-sm">
+            <p className="mb-2 font-semibold text-warning dark:text-warning">
               Email couldn&apos;t be delivered to this address
             </p>
             <p className="mb-3 text-muted">
@@ -62,7 +62,7 @@ export function ForgotPasswordForm() {
             </p>
             <a
               href={`/reset-password?token=${state.devToken}`}
-              className="inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              className="inline-block rounded-lg bg-brand-solid px-4 py-2 text-sm font-semibold text-on-brand transition hover:opacity-90"
             >
               Reset my password →
             </a>

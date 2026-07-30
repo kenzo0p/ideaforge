@@ -55,7 +55,7 @@ export default function ShareProject({
             <div className="flex items-center gap-2 text-sm font-semibold">
               Share
               {token && (
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-500">
+                <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
                   Public link on
                 </span>
               )}
@@ -73,8 +73,8 @@ export default function ShareProject({
           disabled={pending}
           className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
             token
-              ? "border border-border text-muted hover:text-rose-500"
-              : "bg-brand text-white hover:opacity-90"
+              ? "border border-border text-muted hover:text-danger"
+              : "bg-brand-solid text-on-brand hover:opacity-90"
           }`}
         >
           {pending ? <Loader2 className="size-3.5 animate-spin" /> : <Link2 className="size-3.5" />}
@@ -88,13 +88,13 @@ export default function ShareProject({
             readOnly
             value={url}
             onFocus={(e) => e.currentTarget.select()}
-            className="flex-1 rounded-lg border border-border bg-background/40 px-3 py-2 font-mono text-xs outline-none"
+            className="flex-1 rounded-lg border border-border-strong bg-surface px-3 py-2 font-mono text-xs outline-none"
           />
           <button
             onClick={copy}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium transition hover:border-brand/50"
           >
-            {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+            {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
             {copied ? "Copied" : "Copy"}
           </button>
         </div>

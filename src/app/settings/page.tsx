@@ -43,7 +43,7 @@ export default async function SettingsPage() {
         </Card>
 
         <Card
-          icon={<ShieldAlert className="size-4 text-rose-500" />}
+          icon={<ShieldAlert className="size-4 text-danger" />}
           title="Danger zone"
           danger
         >
@@ -68,7 +68,7 @@ function Card({
   return (
     <section
       className={`rounded-2xl border bg-card p-5 shadow-sm ${
-        danger ? "border-rose-500/30" : "border-border"
+        danger ? "border-danger/30" : "border-border"
       }`}
     >
       <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">

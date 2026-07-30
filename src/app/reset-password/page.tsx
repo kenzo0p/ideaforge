@@ -33,8 +33,8 @@ export default async function ResetPasswordPage({
       {valid ? (
         <ResetPasswordForm token={token} />
       ) : (
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/5 p-6 text-center">
-          <span className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-rose-500/10 text-rose-500">
+        <div className="rounded-2xl border border-danger/40 bg-danger/5 p-6 text-center">
+          <span className="mx-auto mb-3 flex size-11 items-center justify-center rounded-full bg-danger/10 text-danger">
             <AlertTriangle className="size-5" />
           </span>
           <p className="font-semibold">This link is invalid or has expired</p>
@@ -43,7 +43,7 @@ export default async function ResetPasswordPage({
           </p>
           <Link
             href="/forgot-password"
-            className="mt-4 inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+            className="mt-4 inline-block rounded-lg bg-brand-solid px-4 py-2 text-sm font-semibold text-on-brand transition hover:opacity-90"
           >
             Request a new link
           </Link>

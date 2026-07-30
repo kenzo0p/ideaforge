@@ -53,8 +53,8 @@ export default async function NotificationsPage() {
                 <span
                   className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg ${
                     n.delivered
-                      ? "bg-emerald-500/15 text-emerald-500"
-                      : "bg-amber-500/15 text-amber-500"
+                      ? "bg-success/15 text-success"
+                      : "bg-warning/15 text-warning"
                   }`}
                   title={n.delivered ? "Delivered to Telegram" : "Not delivered"}
                 >

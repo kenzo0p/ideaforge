@@ -48,7 +48,7 @@ export default function ProjectPlanPanel({
         </div>
         <div className="flex items-center gap-2 text-xs text-muted">
           {plan.demo && (
-            <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-500">
+            <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-warning">
               Demo data
             </span>
           )}
@@ -69,7 +69,7 @@ export default function ProjectPlanPanel({
         <Section icon={<Layers className="size-4 text-brand" />} title="Recommended tech stack">
           <div className="grid gap-2 sm:grid-cols-2">
             {plan.techStack.map((t, i) => (
-              <div key={i} className="rounded-lg border border-border bg-background/40 p-3">
+              <div key={i} className="rounded-lg border border-border bg-surface p-3">
                 <div className="text-[10px] font-medium uppercase tracking-wide text-muted">
                   {t.category}
                 </div>
@@ -88,7 +88,7 @@ export default function ProjectPlanPanel({
             {plan.architecture.map((c, i) => (
               <div
                 key={i}
-                className="flex flex-col gap-1 rounded-lg border border-border bg-background/40 p-3 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   <span className="font-semibold">{c.name}</span>
@@ -120,7 +120,7 @@ export default function ProjectPlanPanel({
             <div className="mb-4 flex items-center gap-3">
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-border">
                 <div
-                  className="h-full rounded-full bg-brand transition-all"
+                  className="h-full rounded-full bg-brand-solid transition-all"
                   style={{ width: `${Math.round((done.length / plan.milestones.length) * 100)}%` }}
                 />
               </div>
@@ -141,7 +141,7 @@ export default function ProjectPlanPanel({
                     aria-label={isDone ? "Mark incomplete" : "Mark complete"}
                     className={`absolute -left-[31px] top-0.5 flex size-5 items-center justify-center rounded-full border-2 transition ${
                       isDone
-                        ? "border-emerald-500 bg-emerald-500 text-white"
+                        ? "border-success bg-success text-on-status"
                         : "border-brand bg-card hover:bg-brand/10"
                     }`}
                   >
@@ -160,7 +160,7 @@ export default function ProjectPlanPanel({
                   {m.tasks.map((task, j) => (
                     <li
                       key={j}
-                      className="rounded bg-background/60 px-2 py-0.5 text-xs text-muted"
+                      className="rounded bg-surface px-2 py-0.5 text-xs text-muted"
                     >
                       {task}
                     </li>
@@ -182,7 +182,7 @@ export default function ProjectPlanPanel({
         <Section icon={<Plug className="size-4 text-brand" />} title="APIs & services">
           <div className="grid gap-2 sm:grid-cols-2">
             {plan.apis.map((a, i) => (
-              <div key={i} className="rounded-lg border border-border bg-background/40 p-3 text-sm">
+              <div key={i} className="rounded-lg border border-border bg-surface p-3 text-sm">
                 <span className="font-semibold">{a.name}</span>
                 <span className="text-muted"> — {a.purpose}</span>
               </div>
@@ -207,7 +207,7 @@ export default function ProjectPlanPanel({
         <Section icon={<Boxes className="size-4 text-brand" />} title="Knowledge clusters">
           <div className="grid gap-3 sm:grid-cols-3">
             {plan.clusters.map((c, i) => (
-              <div key={i} className="rounded-xl border border-border bg-background/40 p-4">
+              <div key={i} className="rounded-xl border border-border bg-surface p-4">
                 <div className="font-semibold">{c.theme}</div>
                 <p className="mt-1 text-xs text-muted">{c.summary}</p>
                 <ul className="mt-2 space-y-1 text-sm">

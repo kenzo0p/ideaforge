@@ -17,7 +17,7 @@ export default function SignInGate() {
       <div className="mt-5 flex items-center justify-center gap-2">
         <Link
           href="/sign-up"
-          className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+          className="rounded-lg bg-brand-solid px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90"
         >
           Create account
         </Link>

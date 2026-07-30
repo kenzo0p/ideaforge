@@ -96,7 +96,7 @@ export default function AppShell({
     <div className="flex h-full flex-col gap-1 p-3">
       <div className={`mb-4 flex items-center ${mini ? "justify-center" : "justify-between"}`}>
         <Link href="/" className="flex items-center gap-2 px-1 py-1.5" title="IdeaForge">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand to-brand-2 text-white">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-solid to-brand-2-solid text-on-brand">
             <Sparkles className="size-4" />
           </span>
           {!mini && <span className="text-lg font-bold">IdeaForge</span>}
@@ -105,7 +105,7 @@ export default function AppShell({
           <button
             onClick={toggleCollapsed}
             title="Collapse sidebar"
-            className="hidden rounded-lg p-1.5 text-muted transition hover:bg-background hover:text-foreground lg:block"
+            className="hidden rounded-lg p-1.5 text-muted transition hover:bg-hover hover:text-foreground lg:block"
           >
             <PanelLeftClose className="size-4" />
           </button>
@@ -116,7 +116,7 @@ export default function AppShell({
         <button
           onClick={toggleCollapsed}
           title="Expand sidebar"
-          className="mb-1 flex justify-center rounded-lg p-2 text-muted transition hover:bg-background hover:text-foreground"
+          className="mb-1 flex justify-center rounded-lg p-2 text-muted transition hover:bg-hover hover:text-foreground"
         >
           <PanelLeftOpen className="size-4" />
         </button>
@@ -156,20 +156,20 @@ export default function AppShell({
               } ${
                 active
                   ? "bg-brand/10 text-brand"
-                  : "text-muted hover:bg-background hover:text-foreground"
+                  : "text-muted hover:bg-hover hover:text-foreground"
               }`}
             >
               <span className="relative shrink-0">
                 <n.icon className="size-4" />
                 {showBadge && mini && (
-                  <span className="absolute -right-1 -top-1 size-2 rounded-full bg-brand" />
+                  <span className="absolute -right-1 -top-1 size-2 rounded-full bg-brand-solid" />
                 )}
               </span>
               {!mini && (
                 <>
                   <span className="flex-1">{n.label}</span>
                   {showBadge && (
-                    <span className="rounded-full bg-brand px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    <span className="rounded-full bg-brand-solid px-1.5 py-0.5 text-[10px] font-semibold text-on-brand">
                       {unreadCount > 9 ? "9+" : unreadCount}
                     </span>
                   )}
@@ -203,7 +203,7 @@ export default function AppShell({
                     className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition ${
                       active
                         ? "bg-brand/10 text-brand"
-                        : "text-muted hover:bg-background hover:text-foreground"
+                        : "text-muted hover:bg-hover hover:text-foreground"
                     }`}
                   >
                     <FileText className="size-3.5 shrink-0" />
@@ -223,7 +223,7 @@ export default function AppShell({
                             className={`flex items-center gap-2 rounded-md px-2 py-1 text-xs transition ${
                               isCurrent
                                 ? "bg-brand/10 font-medium text-brand"
-                                : "text-muted hover:bg-background hover:text-foreground"
+                                : "text-muted hover:bg-hover hover:text-foreground"
                             }`}
                           >
                             <s.icon className="size-3 shrink-0" />
@@ -249,7 +249,7 @@ export default function AppShell({
               <button
                 type="submit"
                 title={`Sign out (${user.email})`}
-                className="flex w-full justify-center rounded-lg p-2 text-muted transition hover:bg-background hover:text-rose-500"
+                className="flex w-full justify-center rounded-lg p-2 text-muted transition hover:bg-hover hover:text-danger"
               >
                 <LogOut className="size-4" />
               </button>
@@ -262,7 +262,7 @@ export default function AppShell({
               <form action={signOutAction}>
                 <button
                   type="submit"
-                  className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-muted transition hover:text-rose-500"
+                  className="mt-1 inline-flex items-center gap-1.5 text-sm font-medium text-muted transition hover:text-danger"
                 >
                   <LogOut className="size-4" /> Sign out
                 </button>
@@ -274,7 +274,7 @@ export default function AppShell({
             <Link
               href="/sign-in"
               title="Sign in"
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:bg-background hover:text-foreground ${
+              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:bg-hover hover:text-foreground ${
                 mini ? "justify-center" : ""
               }`}
             >
@@ -284,7 +284,7 @@ export default function AppShell({
             <Link
               href="/sign-up"
               title="Sign up"
-              className={`flex items-center justify-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90`}
+              className={`flex items-center justify-center gap-1.5 rounded-lg bg-brand-solid px-3 py-2 text-sm font-semibold text-on-brand transition hover:opacity-90`}
             >
               <UserPlus className="size-4 shrink-0" />
               {!mini && "Sign up"}
@@ -310,7 +310,7 @@ export default function AppShell({
       {/* Mobile top bar */}
       <div className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-sidebar/90 px-4 py-3 backdrop-blur lg:hidden">
         <Link href="/" className="flex items-center gap-2 font-bold">
-          <span className="flex size-6 items-center justify-center rounded-md bg-gradient-to-br from-brand to-brand-2 text-white">
+          <span className="flex size-6 items-center justify-center rounded-md bg-gradient-to-br from-brand-solid to-brand-2-solid text-on-brand">
             <Sparkles className="size-3.5" />
           </span>
           IdeaForge
@@ -322,7 +322,7 @@ export default function AppShell({
         >
           <Menu className="size-5" />
           {unreadCount > 0 && (
-            <span className="absolute right-1 top-1 size-2 rounded-full bg-brand" />
+            <span className="absolute right-1 top-1 size-2 rounded-full bg-brand-solid" />
           )}
         </button>
       </div>

@@ -43,15 +43,15 @@ export default function ProjectTabBar({
             scroll={false}
             className={`inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition ${
               isActive
-                ? "bg-brand text-white shadow-sm"
-                : "text-muted hover:bg-background hover:text-foreground"
+                ? "bg-brand-solid text-on-brand shadow-sm"
+                : "text-muted hover:bg-hover hover:text-foreground"
             }`}
           >
             <Icon className="size-4 shrink-0" />
             <span>{t.label}</span>
             {ready[t.key] && (
               <Check
-                className={`size-3.5 shrink-0 ${isActive ? "text-white/80" : "text-emerald-500"}`}
+                className={`size-3.5 shrink-0 ${isActive ? "text-on-brand/80" : "text-success"}`}
               />
             )}
           </Link>

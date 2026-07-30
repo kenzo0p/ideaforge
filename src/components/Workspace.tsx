@@ -52,13 +52,13 @@ export default function Workspace({
             formRef.current?.reset();
           })
         }
-        className="mb-6 grid gap-2 rounded-xl border border-border bg-background/40 p-3 sm:grid-cols-[auto_1fr_auto]"
+        className="mb-6 grid gap-2 rounded-xl border border-border bg-surface p-3 sm:grid-cols-[auto_1fr_auto]"
       >
         <input type="hidden" name="projectId" value={projectId} />
         <select
           name="kind"
           defaultValue="note"
-          className="rounded-lg border border-border bg-card px-2 py-2 text-sm outline-none"
+          className="rounded-lg border border-border-strong bg-card px-2 py-2 text-sm outline-none"
         >
           {KINDS.map((k) => (
             <option key={k.value} value={k.value}>
@@ -75,7 +75,7 @@ export default function Workspace({
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-solid px-3 py-2 text-sm font-semibold text-on-brand transition hover:opacity-90 disabled:opacity-50"
         >
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
           Add
@@ -83,13 +83,13 @@ export default function Workspace({
         <input
           name="url"
           placeholder="URL (optional, for sources)"
-          className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-brand/60 sm:col-span-3"
+          className="rounded-lg border border-border-strong bg-card px-3 py-2 text-sm outline-none focus:border-brand/60 sm:col-span-3"
         />
         <textarea
           name="body"
           rows={2}
           placeholder="Details (optional)"
-          className="resize-none rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-brand/60 sm:col-span-3"
+          className="resize-none rounded-lg border border-border-strong bg-card px-3 py-2 text-sm outline-none focus:border-brand/60 sm:col-span-3"
         />
       </form>
 
@@ -125,7 +125,7 @@ export default function Workspace({
 function WorkspaceRow({ item, projectId }: { item: WorkspaceItem; projectId: string }) {
   const [pending, startTransition] = useTransition();
   return (
-    <li className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background/40 p-3">
+    <li className="flex items-start justify-between gap-3 rounded-lg border border-border bg-surface p-3">
       <div className="min-w-0">
         {item.url ? (
           <a
@@ -145,7 +145,7 @@ function WorkspaceRow({ item, projectId }: { item: WorkspaceItem; projectId: str
       <button
         onClick={() => startTransition(() => deleteWorkspaceItemAction(item.id, projectId))}
         disabled={pending}
-        className="shrink-0 rounded-md p-1 text-muted transition hover:text-rose-500"
+        className="shrink-0 rounded-md p-1 text-muted transition hover:text-danger"
         aria-label="Delete item"
       >
         {pending ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}

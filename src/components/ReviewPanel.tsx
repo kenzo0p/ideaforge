@@ -58,10 +58,10 @@ export default function ReviewPanel({ locale }: { locale: string }) {
 
   const scoreTone =
     !review || review.score >= 75
-      ? "text-emerald-500"
+      ? "text-success"
       : review.score >= 50
-        ? "text-amber-500"
-        : "text-rose-500";
+        ? "text-warning"
+        : "text-danger";
 
   return (
     <div className="w-full space-y-4">
@@ -103,7 +103,7 @@ export default function ReviewPanel({ locale }: { locale: string }) {
         <button
           onClick={() => inputRef.current?.click()}
           disabled={status === "loading"}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-brand-solid px-4 py-2 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90 disabled:opacity-50"
         >
           {status === "loading" ? (
             <Loader2 className="size-4 animate-spin" />
@@ -127,7 +127,7 @@ export default function ReviewPanel({ locale }: { locale: string }) {
       )}
 
       {status === "error" && (
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/5 p-5 text-sm text-rose-500 shadow-sm">
+        <div className="rounded-2xl border border-danger/40 bg-danger/5 p-5 text-sm text-danger shadow-sm">
           ⚠️ {error}
         </div>
       )}
@@ -151,14 +151,14 @@ export default function ReviewPanel({ locale }: { locale: string }) {
               </div>
             </div>
             {review.demo && (
-              <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-500">
+              <span className="shrink-0 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs text-warning">
                 Demo data
               </span>
             )}
           </div>
 
           {review.strengths.length > 0 && (
-            <Section icon={<CheckCircle2 className="size-4 text-emerald-500" />} title="What works">
+            <Section icon={<CheckCircle2 className="size-4 text-success" />} title="What works">
               {review.strengths.map((s, i) => (
                 <Point key={i} title={s.title} detail={s.detail} tone="emerald" />
               ))}
@@ -175,13 +175,13 @@ export default function ReviewPanel({ locale }: { locale: string }) {
 
           {review.missing.length > 0 && (
             <Section
-              icon={<AlertTriangle className="size-4 text-amber-500" />}
+              icon={<AlertTriangle className="size-4 text-warning" />}
               title="A judge will look for these"
             >
               <ul className="space-y-1.5 text-sm">
                 {review.missing.map((m, i) => (
                   <li key={i} className="flex gap-2">
-                    <span className="text-amber-500">•</span>
+                    <span className="text-warning">•</span>
                     <span className="text-foreground/90">{m}</span>
                   </li>
                 ))}
@@ -196,7 +196,7 @@ export default function ReviewPanel({ locale }: { locale: string }) {
             >
               <div className="space-y-2">
                 {review.sectionNotes.map((n, i) => (
-                  <div key={i} className="rounded-lg border border-border bg-background/40 p-3">
+                  <div key={i} className="rounded-lg border border-border bg-surface p-3">
                     <div className="mb-1 inline-flex items-center gap-2">
                       <span className="rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold text-brand">
                         {review.kind === "pptx" ? "Slide" : "Page"} {n.index}
@@ -248,8 +248,8 @@ function Point({
   tone: "emerald" | "brand";
 }) {
   return (
-    <div className="mb-2 rounded-lg border border-border bg-background/40 p-3">
-      <div className={`font-medium ${tone === "emerald" ? "text-emerald-500" : "text-brand"}`}>
+    <div className="mb-2 rounded-lg border border-border bg-surface p-3">
+      <div className={`font-medium ${tone === "emerald" ? "text-success" : "text-brand"}`}>
         {title}
       </div>
       <p className="mt-0.5 text-sm text-foreground/90">{detail}</p>

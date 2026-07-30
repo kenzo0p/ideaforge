@@ -52,7 +52,7 @@ export default function ProjectFilters({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search projects…"
-            className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-8 text-sm outline-none focus:border-brand/60"
+            className="w-full rounded-lg border border-border-strong bg-card py-2 pl-9 pr-8 text-sm outline-none focus:border-brand/60"
           />
           {query && (
             <button
@@ -73,7 +73,7 @@ export default function ProjectFilters({
                 onClick={() => setFilter(f.key)}
                 className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
                   filter === f.key
-                    ? "bg-brand text-white"
+                    ? "bg-brand-solid text-on-brand"
                     : "text-muted hover:text-foreground"
                 }`}
               >

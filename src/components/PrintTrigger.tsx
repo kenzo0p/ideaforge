@@ -15,7 +15,7 @@ export default function PrintTrigger({ auto = true }: { auto?: boolean }) {
   return (
     <button
       onClick={() => window.print()}
-      className="no-print inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+      className="no-print inline-flex items-center gap-1.5 rounded-lg bg-brand-solid px-3.5 py-2 text-sm font-semibold text-on-brand shadow-sm transition hover:opacity-90"
     >
       <Printer className="size-4" /> Save as PDF
     </button>

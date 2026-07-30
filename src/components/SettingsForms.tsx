@@ -22,7 +22,7 @@ const LANGUAGES = [
 ];
 
 const input =
-  "w-full rounded-lg border border-border bg-background/40 px-3 py-2 text-sm outline-none focus:border-brand/60";
+  "w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm outline-none focus:border-brand/60";
 
 function Submit({ label, danger = false }: { label: string; danger?: boolean }) {
   const { pending } = useFormStatus();
@@ -31,7 +31,7 @@ function Submit({ label, danger = false }: { label: string; danger?: boolean }) 
       type="submit"
       disabled={pending}
       className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:opacity-50 ${
-        danger ? "bg-rose-600 text-white hover:opacity-90" : "bg-brand text-white hover:opacity-90"
+        danger ? "bg-danger text-on-status hover:opacity-90" : "bg-brand-solid text-on-brand hover:opacity-90"
       }`}
     >
       {pending && <Loader2 className="size-4 animate-spin" />}
@@ -43,13 +43,13 @@ function Submit({ label, danger = false }: { label: string; danger?: boolean }) 
 function Notice({ state }: { state: SettingsState }) {
   if (state.error)
     return (
-      <p className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-500">
+      <p className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
         {state.error}
       </p>
     );
   if (state.success)
     return (
-      <p className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-400">
+      <p className="rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm text-success dark:text-success">
         {state.success}
       </p>
     );
@@ -129,7 +129,7 @@ export function DeleteAccountForm() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-rose-500/40 px-4 py-2 text-sm font-semibold text-rose-500 transition hover:bg-rose-500/10"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-danger/40 px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10"
       >
         <AlertTriangle className="size-4" /> Delete account
       </button>

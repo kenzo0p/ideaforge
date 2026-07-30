@@ -22,7 +22,7 @@ export default function ResearchPanel({
         </div>
         <div className="flex items-center gap-2 text-xs text-muted">
           {report.demo && (
-            <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-amber-500">
+            <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-warning">
               Demo data
             </span>
           )}
@@ -58,7 +58,7 @@ export default function ResearchPanel({
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             {report.existingSolutions.map((s, i) => (
-              <div key={i} className="rounded-xl border border-border bg-background/40 p-4">
+              <div key={i} className="rounded-xl border border-border bg-surface p-4">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{s.name}</span>
                   {s.citations && s.citations.length > 0 && (
@@ -68,7 +68,7 @@ export default function ResearchPanel({
                 <p className="mt-1 text-sm text-muted">{s.what}</p>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <div className="mb-1 font-medium text-emerald-500">Strengths</div>
+                    <div className="mb-1 font-medium text-success">Strengths</div>
                     <ul className="space-y-0.5 text-muted">
                       {s.strengths.map((x, j) => (
                         <li key={j}>+ {x}</li>
@@ -76,7 +76,7 @@ export default function ResearchPanel({
                     </ul>
                   </div>
                   <div>
-                    <div className="mb-1 font-medium text-rose-500">Gaps</div>
+                    <div className="mb-1 font-medium text-danger">Gaps</div>
                     <ul className="space-y-0.5 text-muted">
                       {s.gaps.map((x, j) => (
                         <li key={j}>− {x}</li>
@@ -98,7 +98,7 @@ export default function ResearchPanel({
           </h3>
           <div className="space-y-2">
             {report.gaps.map((g, i) => (
-              <div key={i} className="rounded-xl border border-border bg-background/40 p-4">
+              <div key={i} className="rounded-xl border border-border bg-surface p-4">
                 <div className="font-semibold">{g.title}</div>
                 <p className="mt-1 text-sm text-muted">{g.description}</p>
                 <p className="mt-2 text-sm">

@@ -28,8 +28,8 @@ export default async function VerifyEmailPage({
       </p>
 
       {showDevLink && (
-        <div className="mt-5 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-left text-sm">
-          <p className="mb-2 font-semibold text-amber-600 dark:text-amber-400">
+        <div className="mt-5 rounded-xl border border-warning/40 bg-warning/10 p-4 text-left text-sm">
+          <p className="mb-2 font-semibold text-warning dark:text-warning">
             {isConsole
               ? "Dev mode — no email provider configured"
               : "Email couldn't be delivered to this address"}
@@ -41,7 +41,7 @@ export default async function VerifyEmailPage({
           </p>
           <a
             href={`/api/verify-email?token=${dev}`}
-            className="inline-block rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+            className="inline-block rounded-lg bg-brand-solid px-4 py-2 text-sm font-semibold text-on-brand transition hover:opacity-90"
           >
             Verify my email →
           </a>

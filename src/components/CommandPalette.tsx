@@ -191,7 +191,7 @@ export default function CommandPalette({ projects }: { projects: PaletteProject[
                         onMouseEnter={() => setIndex(results.indexOf(c))}
                         onClick={c.run}
                         className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition ${
-                          active ? "bg-brand/10 text-brand" : "text-foreground/90 hover:bg-background"
+                          active ? "bg-brand/10 text-brand" : "text-foreground/90 hover:bg-hover"
                         }`}
                       >
                         <c.icon className="size-4 shrink-0" />

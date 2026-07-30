@@ -55,7 +55,7 @@ export default async function SiteHeader() {
               </Link>
               <Link
                 href="/sign-up"
-                className="rounded-lg bg-brand px-3 py-1.5 font-semibold text-white transition hover:opacity-90"
+                className="rounded-lg bg-brand-solid px-3 py-1.5 font-semibold text-on-brand transition hover:opacity-90"
               >
                 Sign up
               </Link>
