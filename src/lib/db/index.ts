@@ -34,17 +34,45 @@ function uri(): string {
   return value;
 }
 
-const g = globalThis as unknown as { __ideaforgeMongo?: Promise<Db> };
+const g = globalThis as unknown as {
+  __ideaforgeMongo?: Promise<Db>;
+  __ideaforgeMongoFailedAt?: number;
+  __ideaforgeMongoError?: unknown;
+};
+
+/**
+ * How long to keep replaying the last connection error before trying again.
+ *
+ * Without this, a failed connect clears the cache, so the *next* request builds
+ * another MongoClient — and under sustained failure every request opens its own
+ * pool. That is the stampede that turns "the cluster is briefly refusing us"
+ * into "the cluster is out of connections". Recovery is still automatic, just
+ * paced.
+ */
+const RETRY_COOLDOWN_MS = 5_000;
 
 /** The shared database handle, connected and indexed exactly once. */
 export function getDb(): Promise<Db> {
   if (!g.__ideaforgeMongo) {
-    // Never cache a rejected promise: a bad URI would otherwise keep failing
-    // for the life of the process even after the environment is corrected.
-    g.__ideaforgeMongo = connect().catch((err) => {
-      g.__ideaforgeMongo = undefined;
-      throw err;
-    });
+    // Never cache a rejected promise permanently: a bad URI would otherwise
+    // keep failing for the life of the process even once the env is corrected.
+    // But do hold the failure briefly so retries can't pile up.
+    const since = Date.now() - (g.__ideaforgeMongoFailedAt ?? 0);
+    if (g.__ideaforgeMongoError !== undefined && since < RETRY_COOLDOWN_MS) {
+      return Promise.reject(g.__ideaforgeMongoError);
+    }
+    g.__ideaforgeMongo = connect().then(
+      (db) => {
+        g.__ideaforgeMongoError = undefined;
+        return db;
+      },
+      (err) => {
+        g.__ideaforgeMongo = undefined;
+        g.__ideaforgeMongoFailedAt = Date.now();
+        g.__ideaforgeMongoError = err;
+        throw err;
+      },
+    );
   }
   return g.__ideaforgeMongo;
 }

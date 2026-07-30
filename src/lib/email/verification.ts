@@ -1,21 +1,14 @@
-import { headers } from "next/headers";
 import { getMailer } from "./index";
+import { publicOrigin } from "@/lib/http/origin";
 
 // Builds and sends the "verify your email" message. Returns a dev link only when
 // the console mailer is active, so the UI can surface it locally.
-
-async function baseUrl(): Promise<string> {
-  const h = await headers();
-  const host = h.get("host") ?? "localhost:3005";
-  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
-}
 
 export async function sendPasswordResetEmail(
   to: string,
   token: string,
 ): Promise<{ link: string; delivered: boolean }> {
-  const link = `${await baseUrl()}/reset-password?token=${token}`;
+  const link = `${await publicOrigin()}/reset-password?token=${token}`;
   const mailer = getMailer();
   const message = {
     to,
@@ -25,7 +18,7 @@ export async function sendPasswordResetEmail(
       <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto">
         <h2>Reset your password</h2>
         <p>Someone requested a password reset for your IdeaForge account.</p>
-        <p><a href="${link}" style="display:inline-block;background:#6d4aff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Choose a new password</a></p>
+        <p><a href="${link}" style="display:inline-block;background:#5b3ce0;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Choose a new password</a></p>
         <p style="color:#666;font-size:13px">Or paste this link: ${link}<br/>It expires in 1 hour. If this wasn't you, ignore this email — nothing has changed.</p>
       </div>`,
   };
@@ -47,7 +40,7 @@ export async function sendVerificationEmail(
   to: string,
   token: string,
 ): Promise<{ link: string; delivered: boolean }> {
-  const link = `${await baseUrl()}/api/verify-email?token=${token}`;
+  const link = `${await publicOrigin()}/api/verify-email?token=${token}`;
   const mailer = getMailer();
   const message = {
     to,
@@ -57,7 +50,7 @@ export async function sendVerificationEmail(
       <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto">
         <h2>Welcome to IdeaForge 🔨</h2>
         <p>Confirm your email to activate your account and start forging ideas.</p>
-        <p><a href="${link}" style="display:inline-block;background:#6d4aff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify email</a></p>
+        <p><a href="${link}" style="display:inline-block;background:#5b3ce0;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify email</a></p>
         <p style="color:#666;font-size:13px">Or paste this link: ${link}<br/>It expires in 24 hours.</p>
       </div>`,
   };
