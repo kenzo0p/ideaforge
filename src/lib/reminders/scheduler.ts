@@ -20,13 +20,22 @@ import { projectNextStep } from "@/lib/insights/next-step";
 
 const g = globalThis as unknown as { __ideaforgeReminderScheduler?: boolean };
 const TICK_MS = 60_000;
+/**
+ * Reminders are not urgent, and firing one the instant the process boots means
+ * opening the database pool while the server is still starting — on a small
+ * instance that contention is what turns a slow TLS handshake into a failed
+ * one. Let the app finish coming up first.
+ */
+const FIRST_TICK_MS = 30_000;
 
 export function startReminderScheduler(): void {
   if (g.__ideaforgeReminderScheduler) return;
   g.__ideaforgeReminderScheduler = true;
   console.log("⏰ Reminder scheduler started.");
-  void runDueReminders();
-  setInterval(() => void runDueReminders(), TICK_MS);
+  setTimeout(() => {
+    void runDueReminders();
+    setInterval(() => void runDueReminders(), TICK_MS);
+  }, FIRST_TICK_MS).unref?.();
 }
 
 /** Deliver all due reminders. Returns how many were processed. */

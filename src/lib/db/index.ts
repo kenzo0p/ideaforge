@@ -51,9 +51,21 @@ export function getDb(): Promise<Db> {
 
 async function connect(): Promise<Db> {
   const client = new MongoClient(uri(), {
-    // Fail fast with a useful message instead of hanging a request for 30s.
-    serverSelectionTimeoutMS: 10_000,
+    // The driver's default pool is 100 connections. That is far too many for a
+    // small instance talking to a shared-tier cluster: every one needs its own
+    // TLS handshake against a 4096-bit certificate, and an Atlas M0 only allows
+    // 500 connections in total across all clients. Overshooting shows up as
+    // "SSL alert number 80 / tlsv1 alert internal error" with a
+    // SystemOverloadedError label, which reads like a TLS bug and is not one.
+    maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE ?? 10),
+    minPoolSize: 0,
+    // Free instances are CPU-starved and cold-start slowly; 10s was not enough
+    // for the first handshake to land.
+    serverSelectionTimeoutMS: 20_000,
+    connectTimeoutMS: 20_000,
+    socketTimeoutMS: 45_000,
     retryWrites: true,
+    retryReads: true,
   });
 
   try {
@@ -64,6 +76,19 @@ async function connect(): Promise<Db> {
       throw new Error(
         "MongoDB rejected our credentials. Check the username and password in " +
           "MONGODB_URI — a password with @ : / ? # or % must be percent-encoded.",
+        { cause: err },
+      );
+    }
+    // A TLS alert from Atlas almost never means the TLS config is wrong. It
+    // means the cluster refused the connection — usually too many open
+    // connections, or the source IP is not allowed.
+    if (/tlsv1 alert|SSL alert|ERR_SSL|ssl3_read_bytes/i.test(message)) {
+      throw new Error(
+        "MongoDB closed the TLS connection. This is usually the cluster refusing " +
+          "us, not a certificate problem: check Atlas → Metrics → Connections " +
+          "against your tier's limit (M0 allows 500), and confirm Atlas → " +
+          "Network Access allows this host. Lower MONGODB_MAX_POOL_SIZE if the " +
+          "connection count is near the cap.",
         { cause: err },
       );
     }

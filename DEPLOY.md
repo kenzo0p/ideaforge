@@ -33,6 +33,17 @@ Both need MongoDB — see [§1](#1-create-the-database). Jump to
    Atlas → **Network Access** is not allowing Render's IP. Render's egress IPs
    are not fixed on lower tiers, so use `0.0.0.0/0`.
 
+   ```
+   MongoDB closed the TLS connection.
+   ```
+   Despite the wording, the raw form of this — `SSL alert number 80`,
+   `tlsv1 alert internal error` — is almost never a certificate problem. It is
+   the cluster refusing connections. Check **Atlas → Metrics → Connections**
+   against your tier's cap (M0 allows 500 across *all* clients). The app caps
+   its pool at 10 per instance via `MONGODB_MAX_POOL_SIZE`; the driver's own
+   default of 100 will exhaust a free cluster after a few redeploys, because
+   pools from killed instances take minutes to time out server-side.
+
 4. Nothing else to configure — no webhook, no cron.
 
 **Only one process may poll the Telegram bot.** Once Render is live it owns the
