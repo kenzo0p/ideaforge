@@ -7,7 +7,7 @@ import { publicOrigin } from "@/lib/http/origin";
 export async function sendPasswordResetEmail(
   to: string,
   token: string,
-): Promise<{ link: string; delivered: boolean }> {
+): Promise<{ link: string; delivered: boolean; isConsole: boolean }> {
   const link = `${await publicOrigin()}/reset-password?token=${token}`;
   const mailer = getMailer();
   const message = {
@@ -25,21 +25,21 @@ export async function sendPasswordResetEmail(
 
   if (mailer.isConsole) {
     await mailer.send(message);
-    return { link, delivered: false };
+    return { link, delivered: false, isConsole: true };
   }
   try {
     await mailer.send(message);
-    return { link, delivered: true };
+    return { link, delivered: true, isConsole: false };
   } catch (err) {
     console.error("Password reset email failed to send:", err);
-    return { link, delivered: false };
+    return { link, delivered: false, isConsole: false };
   }
 }
 
 export async function sendVerificationEmail(
   to: string,
   token: string,
-): Promise<{ link: string; delivered: boolean }> {
+): Promise<{ link: string; delivered: boolean; isConsole: boolean }> {
   const link = `${await publicOrigin()}/api/verify-email?token=${token}`;
   const mailer = getMailer();
   const message = {
@@ -58,16 +58,16 @@ export async function sendVerificationEmail(
   // Console mailer never "delivers" a real email, so the link is surfaced.
   if (mailer.isConsole) {
     await mailer.send(message);
-    return { link, delivered: false };
+    return { link, delivered: false, isConsole: true };
   }
 
   // Real mailer: if delivery fails (e.g. Resend test-mode restricts recipients),
   // don't crash signup — return delivered:false so a fallback link can be shown.
   try {
     await mailer.send(message);
-    return { link, delivered: true };
+    return { link, delivered: true, isConsole: false };
   } catch (err) {
     console.error("Verification email failed to send:", err);
-    return { link, delivered: false };
+    return { link, delivered: false, isConsole: false };
   }
 }

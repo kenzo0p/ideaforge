@@ -8,11 +8,12 @@ export const dynamic = "force-dynamic";
 export default async function VerifyEmailPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; dev?: string }>;
+  searchParams: Promise<{ email?: string; dev?: string; undelivered?: string }>;
 }) {
-  const { email, dev } = await searchParams;
-  // `dev` is present only when no real email went out (console mailer, or a real
-  // send that failed — e.g. Resend test-mode recipient restriction).
+  const { email, dev, undelivered } = await searchParams;
+  // `dev` carries the token, and is set only where surfacing it is safe: the
+  // console mailer, or an explicit SHOW_VERIFICATION_FALLBACK opt-in.
+  // `undelivered` reports a failed send *without* handing over the token.
   const showDevLink = !!dev;
   const isConsole = getMailer().isConsole;
 
@@ -37,7 +38,7 @@ export default async function VerifyEmailPage({
           <p className="mb-3 text-muted">
             {isConsole
               ? "Use this link to verify (in production this is emailed, never shown):"
-              : "Your Resend account is likely in test mode (verify a domain to email anyone). Use this fallback link to verify:"}
+              : "Delivery to this address was rejected. The fallback link is only shown because SHOW_VERIFICATION_FALLBACK is enabled — turn it off outside a demo."}
           </p>
           <a
             href={`/api/verify-email?token=${dev}`}
@@ -45,6 +46,18 @@ export default async function VerifyEmailPage({
           >
             Verify my email →
           </a>
+        </div>
+      )}
+
+      {undelivered && (
+        <div className="mt-5 rounded-xl border border-danger/40 bg-danger/10 p-4 text-left text-sm">
+          <p className="mb-2 font-semibold text-danger">Couldn&apos;t send to this address</p>
+          <p className="text-muted">
+            The mail provider rejected the delivery. If you&apos;re running this app: a Resend
+            account with no verified domain can only send to the address that owns the account —
+            verify a domain and set <code className="rounded bg-surface px-1">EMAIL_FROM</code> to
+            an address on it.
+          </p>
         </div>
       )}
 

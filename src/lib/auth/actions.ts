@@ -22,11 +22,19 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Issue a fresh token, email it, and route to the "check your inbox" page. */
 async function startVerification(userId: string, email: string): Promise<void> {
   const { token } = await createVerificationToken(userId);
-  const { delivered } = await sendVerificationEmail(email, token);
+  const { delivered, isConsole } = await sendVerificationEmail(email, token);
   const params = new URLSearchParams({ email });
-  // Surface a fallback link whenever no real email went out (dev console mailer,
-  // or a real send that failed — e.g. Resend test-mode recipient restriction).
-  if (!delivered) params.set("dev", token);
+
+  // Putting the token on screen lets anyone who can reach the signup form verify
+  // an address they do not own, which defeats the point of verifying at all. So
+  // it is surfaced only when:
+  //   • the console mailer is active (local dev, no provider configured), or
+  //   • an operator explicitly opted in for a demo deployment.
+  // A real send that merely failed is not sufficient on its own.
+  const demoFallback = process.env.SHOW_VERIFICATION_FALLBACK === "1";
+  if (!delivered && (isConsole || demoFallback)) params.set("dev", token);
+  else if (!delivered) params.set("undelivered", "1");
+
   redirect(`/verify-email?${params.toString()}`); // throws NEXT_REDIRECT
 }
 
