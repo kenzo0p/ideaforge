@@ -1,7 +1,7 @@
 // Lets `node --experimental-strip-types` resolve the extensionless and
 // `@/`-aliased imports that TypeScript allows but Node does not.
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 
 const SRC = resolvePath(fileURLToPath(import.meta.url), "../../src");
@@ -15,7 +15,8 @@ export function resolve(specifier, context, next) {
       ? fileURLToPath(spec)
       : resolvePath(dirname(fileURLToPath(context.parentURL)), spec);
     for (const candidate of [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`]) {
-      if (existsSync(candidate) && !candidate.endsWith("/")) {
+      // Must be a FILE: a bare directory path exists but Node cannot import it.
+      if (existsSync(candidate) && statSync(candidate).isFile()) {
         return next(pathToFileURL(candidate).href, context);
       }
     }

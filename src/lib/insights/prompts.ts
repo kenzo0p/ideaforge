@@ -56,13 +56,38 @@ export function keywordsFor(idea: string): string {
   return words.slice(0, 5).join(" ") || deriveTopic(idea);
 }
 
-/** Strip filler verbs / trailing punctuation to get a compact search topic. */
+/**
+ * Compact search topic: drop the leading filler verb, then keep the head of the
+ * sentence up to the first clause break.
+ *
+ * Two things matter here. Search engines do badly on long natural-language
+ * sentences, and a hard `.slice(90)` used to cut mid-word — every query for a
+ * long idea ended in a fragment like "…data with sho", which drags the whole
+ * result set off-topic. Cut on a word boundary, and prefer a clause boundary.
+ */
 export function deriveTopic(idea: string): string {
-  return idea
-    .replace(/^(build|create|make|design|develop)\s+(an?\s+)?/i, "")
+  const MAX_WORDS = 12;
+  const stripped = idea
+    .replace(/^(?:build|create|make|design|develop)\s+(?:an?\s+)?/i, "")
     .replace(/[.?!]+$/, "")
-    .trim()
-    .slice(0, 90);
+    .trim();
+
+  const words = stripped.split(/\s+/).filter(Boolean);
+  // Already compact — every word is signal, so keep the lot. Trimming here is
+  // what turned "campus tool that matches students to research labs" into the
+  // uselessly generic "campus tool".
+  if (words.length <= MAX_WORDS) return stripped;
+
+  // Only for genuinely long ideas: a clause break ("… that fuses X with Y") is
+  // usually where the distinctive part ends and the elaboration begins. Ignore
+  // the split when the head is too short to stand on its own.
+  const head = stripped.split(/\s+(?:that|which|so\s+that|in\s+order\s+to)\s+/i)[0] ?? "";
+  const headWords = head.split(/\s+/).filter(Boolean);
+  // Three words is enough to be specific ("hyperlocal hydroclimate-whiplash
+  // alert tool"); fewer than that and the head is too generic to search on.
+  const chosen = headWords.length >= 3 ? headWords : words;
+
+  return chosen.slice(0, MAX_WORDS).join(" ").replace(/[,;:–—-]+$/, "").trim();
 }
 
 /** Derive a small set of focused search queries from a raw idea (no LLM call). */

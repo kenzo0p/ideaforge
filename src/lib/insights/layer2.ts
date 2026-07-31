@@ -103,8 +103,10 @@ class DefaultLayer2 implements Layer2Service {
     );
     const results = dedupeByUrl(batches.flat()).slice(0, 10);
 
-    // Build citations from the actual results so URLs are never hallucinated.
-    const citations: Citation[] = results.map((r, i) => ({
+    // Candidate sources, numbered for the model. URLs come from real results, so
+    // they can never be hallucinated — but a URL being real does not make it
+    // relevant, which is why the list gets pruned below.
+    const candidates: Citation[] = results.map((r, i) => ({
       id: i + 1,
       title: r.title,
       url: r.url,
@@ -122,18 +124,30 @@ class DefaultLayer2 implements Layer2Service {
     });
 
     const parsed = safeParse(raw);
+    const summaryMarkdown =
+      typeof parsed.summaryMarkdown === "string"
+        ? parsed.summaryMarkdown
+        : "_No summary was produced._";
+    const existingSolutions = Array.isArray(parsed.existingSolutions)
+      ? (parsed.existingSolutions as SolutionComparison[])
+      : [];
+    const gaps = Array.isArray(parsed.gaps) ? (parsed.gaps as ResearchGap[]) : [];
+
+    // Keep only the sources the briefing actually leaned on. A search that drags
+    // in an off-topic page would otherwise still list it under "Sources", which
+    // reads as the app recommending an unrelated link.
+    const { citations, summaryMarkdown: renumbered } = pruneCitations(
+      candidates,
+      summaryMarkdown,
+      [...existingSolutions, ...gaps],
+    );
 
     return {
       queries,
-      summaryMarkdown:
-        typeof parsed.summaryMarkdown === "string"
-          ? parsed.summaryMarkdown
-          : "_No summary was produced._",
+      summaryMarkdown: renumbered,
       citations,
-      existingSolutions: Array.isArray(parsed.existingSolutions)
-        ? (parsed.existingSolutions as SolutionComparison[])
-        : [],
-      gaps: Array.isArray(parsed.gaps) ? (parsed.gaps as ResearchGap[]) : [],
+      existingSolutions,
+      gaps,
       demo: searcher.isMock || getProvider().isMock,
     };
   }
@@ -237,7 +251,12 @@ class DefaultLayer2 implements Layer2Service {
           searcher.search(q, { maxResults: 3, signal }).catch(() => [] as SearchResult[]),
         ),
       );
-      const fallback = categorizeResources(dedupeByUrl(batches.flat()));
+      // The fallback buckets by hostname alone, so anything on github.com would
+      // be offered as "a repo for your project" no matter what it is about.
+      // Require the result to actually share vocabulary with the idea.
+      const fallback = categorizeResources(
+        relevantTo(input.idea, dedupeByUrl(batches.flat())),
+      );
       if (repos.length === 0) repos = fallback.repos;
       if (datasets.length === 0) datasets = fallback.datasets;
       if (papers.length === 0) papers = fallback.papers;
@@ -268,6 +287,71 @@ class DefaultLayer2 implements Layer2Service {
       demo: searcher.isMock || provider.isMock,
     };
   }
+}
+
+/**
+ * Keep only results that share meaningful vocabulary with the idea.
+ *
+ * A generic query ("… open source github project") reliably returns popular but
+ * unrelated repos. Demanding at least one distinctive term in common is a crude
+ * filter, but it removes the obviously-wrong links, and showing an empty bucket
+ * beats showing a confidently wrong one.
+ */
+function relevantTo(idea: string, results: SearchResult[]): SearchResult[] {
+  const terms = new Set(
+    keywordsFor(idea)
+      .split(/\s+/)
+      .filter((w) => w.length > 3),
+  );
+  if (terms.size === 0) return results;
+
+  return results.filter((r) => {
+    const text = `${r.title} ${r.content ?? ""} ${r.url}`.toLowerCase();
+    // Match on stems so "forecast" also catches "forecasting"/"forecasts".
+    return [...terms].some((t) => text.includes(t.slice(0, Math.max(4, t.length - 2))));
+  });
+}
+
+/**
+ * Drop sources the briefing never cited, then renumber so the `[n]` markers in
+ * the prose still line up with the list the reader sees.
+ *
+ * Search returns up to 10 results per idea and some are always tangential. Left
+ * unfiltered they appear under "Sources" as if the app vouched for them.
+ */
+function pruneCitations(
+  candidates: Citation[],
+  summaryMarkdown: string,
+  extras: unknown[],
+): { citations: Citation[]; summaryMarkdown: string } {
+  // Markers appear as [3] or [2, 5] or [1][4] across the prose and the
+  // structured fields, so scan the serialised form of everything.
+  const haystack = `${summaryMarkdown}\n${JSON.stringify(extras)}`;
+  const cited = new Set<number>();
+  for (const m of haystack.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
+    for (const n of m[1].split(",")) {
+      const id = Number(n.trim());
+      if (Number.isInteger(id)) cited.add(id);
+    }
+  }
+
+  const kept = candidates.filter((c) => cited.has(c.id));
+  // If the model cited nothing at all, showing an empty source list is worse
+  // than showing the candidates — fall back rather than strip everything.
+  if (kept.length === 0) return { citations: candidates, summaryMarkdown };
+
+  const renumber = new Map(kept.map((c, i) => [c.id, i + 1]));
+  const citations = kept.map((c, i) => ({ ...c, id: i + 1 }));
+  const rewritten = summaryMarkdown.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (whole, group: string) => {
+    const mapped = group
+      .split(",")
+      .map((n) => renumber.get(Number(n.trim())))
+      .filter((n): n is number => n !== undefined);
+    // A marker pointing only at dropped sources is stale — remove it.
+    return mapped.length ? `[${mapped.join(", ")}]` : "";
+  });
+
+  return { citations, summaryMarkdown: rewritten };
 }
 
 /** Bucket raw search results into repos / datasets / papers by domain. */
