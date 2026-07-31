@@ -48,7 +48,15 @@ export async function changePasswordAction(
   if (next.length < 8) return { error: "New password must be at least 8 characters." };
 
   const full = await getUserByEmail(user.email);
-  if (!full || !verifyPassword(current, full.passwordHash)) {
+  // A Google-only account has no current password to prove. Sending them to the
+  // reset flow is the safe route — it re-proves ownership over email.
+  if (full && !full.passwordHash) {
+    return {
+      error:
+        "This account signs in with Google and has no password yet. Use “Forgot password?” on the sign-in page to set one.",
+    };
+  }
+  if (!full?.passwordHash || !verifyPassword(current, full.passwordHash)) {
     return { error: "Current password is incorrect." };
   }
 
@@ -68,7 +76,10 @@ export async function deleteAccountAction(
   if (confirm !== "DELETE") return { error: 'Type DELETE to confirm.' };
 
   const full = await getUserByEmail(user.email);
-  if (!full || !verifyPassword(password, full.passwordHash)) {
+  if (!full) return { error: "Password is incorrect." };
+  // Google-only accounts can't be asked for a password, so typing DELETE is the
+  // whole confirmation. They already proved identity to reach this page.
+  if (full.passwordHash && !verifyPassword(password, full.passwordHash)) {
     return { error: "Password is incorrect." };
   }
 

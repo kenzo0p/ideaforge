@@ -6,6 +6,12 @@ import { useFormStatus } from "react-dom";
 import { Loader2, Sparkles } from "lucide-react";
 import { signInAction, signUpAction, type AuthState } from "@/lib/auth/actions";
 import ResendVerification from "@/components/ResendVerification";
+import GoogleSignIn from "@/components/GoogleSignIn";
+
+// NEXT_PUBLIC_* values are inlined at build time, so this resolves to a constant
+// in the bundle: no Google button ships unless the project is configured.
+const googleEnabled =
+  !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY && !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
 function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -40,6 +46,12 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
           {isSignUp ? "Save projects and access them anywhere." : "Sign in to your projects."}
         </p>
       </div>
+
+      {googleEnabled && (
+        <div className="mb-4">
+          <GoogleSignIn mode={mode} />
+        </div>
+      )}
 
       <form action={formAction} className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
         {isSignUp && (

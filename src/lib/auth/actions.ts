@@ -58,8 +58,16 @@ export async function signInAction(_prev: AuthState, formData: FormData): Promis
   const password = String(formData.get("password") ?? "");
 
   const user = await getUserByEmail(email);
+  // An account created through Google has no password to check. Say so plainly
+  // rather than "invalid password" — otherwise the user retypes forever.
+  if (user && !user.passwordHash) {
+    return {
+      error:
+        "This account was created with Google. Use “Continue with Google”, or set a password via “Forgot password?”.",
+    };
+  }
   // Same message for missing user vs. wrong password (avoid account enumeration).
-  if (!user || !verifyPassword(password, user.passwordHash)) {
+  if (!user?.passwordHash || !verifyPassword(password, user.passwordHash)) {
     return { error: "Invalid email or password." };
   }
   if (!user.emailVerified) {

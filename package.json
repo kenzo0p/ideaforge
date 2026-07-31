@@ -12,6 +12,8 @@
     "test:db": "node --experimental-strip-types --import ./scripts/ts-resolve-register.mjs --env-file=.env.local scripts/smoke-db.mjs"
   },
   "dependencies": {
+    "firebase": "^12.17.0",
+    "jose": "^6.2.5",
     "jszip": "^3.10.1",
     "lucide-react": "^1.26.0",
     "mongodb": "^7.5.0",

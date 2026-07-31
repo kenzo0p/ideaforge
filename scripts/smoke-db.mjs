@@ -134,6 +134,36 @@ eq("blocks past the limit", (await rl.checkRateLimit(user.id, "smoke", 3, 60_000
 eq("usage reports 3 used", (await rl.getUsage(user.id, "smoke", 3, 60_000)).used, 3);
 eq("a different bucket is independent", (await rl.checkRateLimit(user.id, "other", 3, 60_000)).ok, true);
 
+console.log("\n\x1b[1mgoogle sign-in linking\x1b[0m");
+{
+  const gEmail = `g-${Date.now()}@example.test`;
+  const gUser = await u.upsertGoogleUser({ uid: "uid-1", email: gEmail, name: "G User", emailVerified: true });
+  eq("creates a verified account", gUser.emailVerified, true);
+  ok("account has no password", !(await u.hasPassword(gUser.id)));
+  const again = await u.upsertGoogleUser({ uid: "uid-1", email: gEmail, name: "G User", emailVerified: true });
+  eq("signing in twice reuses the account", again.id, gUser.id);
+
+  // Linking onto an existing password account (Google proved the address).
+  const pwEmail = `pw-${Date.now()}@example.test`;
+  const pwUser = await u.createUser(pwEmail, "salt:hash", "Password User");
+  eq("password account starts unverified", pwUser.emailVerified, false);
+  const linked = await u.upsertGoogleUser({ uid: "uid-2", email: pwEmail, name: "Ignored", emailVerified: true });
+  eq("links to the same account, not a duplicate", linked.id, pwUser.id);
+  eq("linking verifies the address", linked.emailVerified, true);
+  eq("does not clobber the chosen name", linked.name, "Password User");
+  ok("password still works after linking", await u.hasPassword(pwUser.id));
+
+  // The account-takeover guard.
+  let refused = false;
+  try {
+    await u.upsertGoogleUser({ uid: "uid-3", email: pwEmail, name: null, emailVerified: false });
+  } catch { refused = true; }
+  eq("refuses an unverified Google email", refused, true);
+
+  await u.deleteUser(gUser.id);
+  await u.deleteUser(pwUser.id);
+}
+
 console.log("\n\x1b[1mcascade on delete (no foreign keys in Mongo)\x1b[0m");
 await u.deleteUser(user.id);
 const client = new MongoClient(process.env.MONGODB_URI);

@@ -21,11 +21,14 @@ interface UserDoc {
   _id: string;
   email: string;
   name: string | null;
-  passwordHash: string;
+  /** Absent for accounts created purely through Google — there is no password. */
+  passwordHash?: string;
   emailVerified: boolean;
   locale: string | null;
   notificationsSeenAt: number;
   createdAt: number;
+  /** Firebase uid, set once the account has signed in with Google. */
+  googleUid?: string;
 }
 
 /** Anything with a lifetime: `expiresAt` is a Date so the TTL index reaps it. */
@@ -185,9 +188,75 @@ export async function consumeVerificationToken(token: string): Promise<string | 
 
 export async function getUserByEmail(
   email: string,
-): Promise<(User & { passwordHash: string }) | null> {
+): Promise<(User & { passwordHash: string | null }) | null> {
   const d = await (await users()).findOne({ email });
-  return d ? { ...toUser(d), passwordHash: d.passwordHash } : null;
+  return d ? { ...toUser(d), passwordHash: d.passwordHash ?? null } : null;
+}
+
+/**
+ * Find or create the account behind a verified Google identity.
+ *
+ * Linking rule: we attach to an existing account with the same address only
+ * when Google says it verified that address. Without that check, anyone able to
+ * mint a token for an unverified address could seize the matching password
+ * account — the classic OAuth pre-hijack. The caller enforces it too; this is
+ * defence in depth.
+ *
+ * Accounts arriving this way are verified on the spot: Google already proved
+ * ownership, so there is no confirmation email to send.
+ */
+export async function upsertGoogleUser(identity: {
+  uid: string;
+  email: string;
+  name: string | null;
+  emailVerified: boolean;
+}): Promise<User> {
+  if (!identity.emailVerified) {
+    throw new Error("Refusing to link a Google identity with an unverified email.");
+  }
+  const c = await users();
+  const existing = await c.findOne({ email: identity.email });
+
+  if (existing) {
+    // Adopt the Google uid, and treat the address as verified from now on.
+    await c.updateOne(
+      { _id: existing._id },
+      {
+        $set: {
+          googleUid: identity.uid,
+          emailVerified: true,
+          // Only fill a blank name; never overwrite one the user chose.
+          ...(existing.name ? {} : { name: identity.name }),
+        },
+      },
+    );
+    return toUser({
+      ...existing,
+      googleUid: identity.uid,
+      emailVerified: true,
+      name: existing.name ?? identity.name,
+    });
+  }
+
+  // Brand-new, password-less account.
+  const doc: UserDoc = {
+    _id: randomUUID(),
+    email: identity.email,
+    name: identity.name,
+    emailVerified: true,
+    locale: null,
+    notificationsSeenAt: 0,
+    createdAt: Date.now(),
+    googleUid: identity.uid,
+  };
+  await c.insertOne(doc);
+  return toUser(doc);
+}
+
+/** Whether this account can sign in with a password at all. */
+export async function hasPassword(userId: string): Promise<boolean> {
+  const d = await (await users()).findOne({ _id: userId }, { projection: { passwordHash: 1 } });
+  return !!d?.passwordHash;
 }
 
 export async function getUserById(id: string): Promise<User | null> {
