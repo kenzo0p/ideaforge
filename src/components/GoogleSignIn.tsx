@@ -67,10 +67,22 @@ export default function GoogleSignIn({ mode }: { mode: "sign-in" | "sign-up" }) 
       } else if (/popup-blocked/i.test(message)) {
         setError("Your browser blocked the popup. Allow popups for this site and try again.");
       } else if (/auth\/unauthorized-domain/i.test(message)) {
-        setError("This domain isn't authorised in Firebase → Authentication → Settings.");
+        setError(
+          "This site isn't in Firebase → Authentication → Settings → Authorised domains.",
+        );
+      } else if (/auth\/operation-not-allowed/i.test(message)) {
+        setError("Google sign-in isn't enabled in Firebase → Authentication → Sign-in method.");
+      } else if (/database is closing|indexeddb|storage|web-storage-unsupported/i.test(message)) {
+        // Browser storage errors say nothing useful to the person reading them.
+        setError(
+          "Your browser blocked the storage Google sign-in needs. Try a normal (non-private) window, or allow cookies and site data for this site.",
+        );
+      } else if (/auth\/network-request-failed/i.test(message)) {
+        setError("Network error reaching Google. Check your connection and try again.");
       } else {
         setError(message);
       }
+      console.error("Google sign-in failed:", err);
       setBusy(false);
     }
   }

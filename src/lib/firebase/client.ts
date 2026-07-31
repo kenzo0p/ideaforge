@@ -1,7 +1,15 @@
 "use client";
 
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { GoogleAuthProvider, getAuth, signInWithPopup } from "firebase/auth";
+import {
+  GoogleAuthProvider,
+  browserPopupRedirectResolver,
+  getAuth,
+  inMemoryPersistence,
+  initializeAuth,
+  signInWithPopup,
+  type Auth,
+} from "firebase/auth";
 
 // ---------------------------------------------------------------------------
 // Firebase in the browser — used only to run the Google popup and obtain an ID
@@ -23,6 +31,7 @@ const config = {
 };
 
 let app: FirebaseApp | null = null;
+let auth: Auth | null = null;
 
 function getFirebaseApp(): FirebaseApp {
   if (!config.apiKey || !config.projectId) {
@@ -32,9 +41,37 @@ function getFirebaseApp(): FirebaseApp {
   return app;
 }
 
+/**
+ * Auth configured with **in-memory persistence only**.
+ *
+ * By default Firebase stores its session in IndexedDB, which fails with errors
+ * like "Database is closing" in private windows, with storage blocked, or when
+ * the popup steals focus and the browser tears the IDB connection down. We have
+ * no use for that persistence — the ID token is exchanged for our own cookie
+ * within milliseconds — so opting out removes a whole class of failure.
+ *
+ * `initializeAuth` (rather than `getAuth`) is what allows the persistence and
+ * resolver to be chosen before anything touches storage.
+ */
+function getFirebaseAuth(): Auth {
+  if (auth) return auth;
+  const firebaseApp = getFirebaseApp();
+  try {
+    auth = initializeAuth(firebaseApp, {
+      persistence: inMemoryPersistence,
+      popupRedirectResolver: browserPopupRedirectResolver,
+    });
+  } catch {
+    // Already initialised — happens on a dev HMR reload, where the module state
+    // resets but the Firebase app instance survives. Reuse what's there.
+    auth = getAuth(firebaseApp);
+  }
+  return auth;
+}
+
 /** Run the Google popup and return the Firebase ID token for our server. */
 export async function signInWithGoogle(): Promise<string> {
-  const auth = getAuth(getFirebaseApp());
+  const auth = getFirebaseAuth();
   const provider = new GoogleAuthProvider();
   // Always show the chooser: without this, a signed-in Google user is silently
   // reused, which is confusing on a shared machine.
@@ -43,8 +80,8 @@ export async function signInWithGoogle(): Promise<string> {
   const credential = await signInWithPopup(auth, provider);
   const idToken = await credential.user.getIdToken();
 
-  // Our cookie is the session from here on; Firebase's own client session is
-  // just a means to get the token, so drop it.
+  // Nothing to clean up with in-memory persistence, but drop the client-side
+  // user anyway so a stray reference can't be mistaken for a session.
   await auth.signOut().catch(() => {});
   return idToken;
 }
