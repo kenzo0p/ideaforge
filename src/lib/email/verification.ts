@@ -18,7 +18,7 @@ export async function sendPasswordResetEmail(
       <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto">
         <h2>Reset your password</h2>
         <p>Someone requested a password reset for your IdeaForge account.</p>
-        <p><a href="${link}" style="display:inline-block;background:#5b3ce0;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Choose a new password</a></p>
+        <p><a href="${link}" style="display:inline-block;background:#0d6a6a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Choose a new password</a></p>
         <p style="color:#666;font-size:13px">Or paste this link: ${link}<br/>It expires in 1 hour. If this wasn't you, ignore this email — nothing has changed.</p>
       </div>`,
   };
@@ -50,7 +50,7 @@ export async function sendVerificationEmail(
       <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto">
         <h2>Welcome to IdeaForge 🔨</h2>
         <p>Confirm your email to activate your account and start forging ideas.</p>
-        <p><a href="${link}" style="display:inline-block;background:#5b3ce0;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify email</a></p>
+        <p><a href="${link}" style="display:inline-block;background:#0d6a6a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify email</a></p>
         <p style="color:#666;font-size:13px">Or paste this link: ${link}<br/>It expires in 24 hours.</p>
       </div>`,
   };

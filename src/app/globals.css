@@ -36,23 +36,23 @@
 
 /* Light tokens — the default */
 :root {
-  --background: #f4f4f9;
+  --background: #f6f6f3;
   --card: #ffffff;
   --sidebar: #ffffff;
-  --surface: #f0f0f6;
-  --hover: #ebeaf3;
+  --surface: #eeeee9;
+  --hover: #e5e5df;
 
-  --foreground: #15141d;
-  --muted: #5b5a6e;
+  --foreground: #12201f;
+  --muted: #4b5a58;
 
-  --border: #e4e3ee;
-  --border-strong: #8a879f;
+  --border: #e0e0d8;
+  --border-strong: #808076;
 
-  --brand: #5b3ce0;
-  --brand-solid: #5b3ce0;
-  --brand-hover: #4a2fc4;
-  --brand-2: #8b2ee0;
-  --brand-2-solid: #9333ea;
+  --brand: #0d6a6a;
+  --brand-solid: #0d6a6a;
+  --brand-hover: #095050;
+  --brand-2: #a35a1f;
+  --brand-2-solid: #a35a1f;
   --on-brand: #ffffff;
   --on-status: #ffffff;
 
@@ -66,25 +66,25 @@
    Kept in one place so the two selectors can never drift apart. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light):not(.dark) {
-    --background: #0b0a11;
-    --card: #15141f;
-    --sidebar: #0f0e17;
-    --surface: #1c1b28;
-    --hover: #242233;
+    --background: #070c0c;
+    --card: #111a1a;
+    --sidebar: #0a1111;
+    --surface: #182323;
+    --hover: #212e2e;
 
-    --foreground: #eceaf4;
-    --muted: #a5a2ba;
+    --foreground: #e6efee;
+    --muted: #95a9a7;
 
-    --border: #2a2839;
-    --border-strong: #6b6884;
+    --border: #233030;
+    --border-strong: #5c6f6e;
 
-    --brand: #a78bfa;
-    --brand-solid: #6242e6;
-    --brand-hover: #7355f0;
-    --brand-2: #c084fc;
-    --brand-2-solid: #8b3ae8;
+    --brand: #4fd1c5;
+    --brand-solid: #10807d;
+    --brand-hover: #0c6a67;
+    --brand-2: #e0a061;
+    --brand-2-solid: #a35a1f;
     --on-brand: #ffffff;
-    --on-status: #0b0a11;
+    --on-status: #070c0c;
 
     --success: #34d399;
     --warning: #fbbf24;
@@ -94,25 +94,25 @@
 }
 
 :root.dark {
-  --background: #0b0a11;
-  --card: #15141f;
-  --sidebar: #0f0e17;
-  --surface: #1c1b28;
-  --hover: #242233;
+  --background: #070c0c;
+  --card: #111a1a;
+  --sidebar: #0a1111;
+  --surface: #182323;
+  --hover: #212e2e;
 
-  --foreground: #eceaf4;
-  --muted: #a5a2ba;
+  --foreground: #e6efee;
+  --muted: #95a9a7;
 
-  --border: #2a2839;
-  --border-strong: #6b6884;
+  --border: #233030;
+  --border-strong: #5c6f6e;
 
-  --brand: #a78bfa;
-  --brand-solid: #6242e6;
-  --brand-hover: #7355f0;
-  --brand-2: #c084fc;
-  --brand-2-solid: #8b3ae8;
+  --brand: #4fd1c5;
+  --brand-solid: #10807d;
+  --brand-hover: #0c6a67;
+  --brand-2: #e0a061;
+  --brand-2-solid: #a35a1f;
   --on-brand: #ffffff;
-  --on-status: #0b0a11;
+  --on-status: #070c0c;
 
   --success: #34d399;
   --warning: #fbbf24;

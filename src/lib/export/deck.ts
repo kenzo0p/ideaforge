@@ -17,9 +17,14 @@ export interface DeckInput {
   plan?: ProjectPlan | null;
 }
 
-const BRAND = "6D4AFF";
-const INK = "1A1922";
-const MUTED = "6B6A7B";
+// PowerPoint has no CSS variables, so the palette is mirrored here. Keep these
+// in step with the light-theme tokens in globals.css — they had drifted a full
+// redesign behind before anyone noticed, because nothing links the two.
+const BRAND = "0D6A6A"; // --brand-solid
+const INK = "12201F"; // --foreground
+const MUTED = "4B5A58"; // --muted
+const PAGE = "F6F6F3"; // --background
+const HAIRLINE = "E0E0D8"; // --border
 
 /** Strip markdown syntax so text renders cleanly in slide shapes. */
 function plain(md: string): string {
@@ -93,7 +98,7 @@ export async function buildPptxBuffer(input: DeckInput): Promise<Buffer> {
   const subtitle = sameGist(coverTitle, subtitleSource) ? "" : subtitleSource;
 
   const cover = pptx.addSlide();
-  cover.background = { color: "F7F7FB" };
+  cover.background = { color: PAGE };
   cover.addText(clamp(coverTitle, 70), {
     x: 0.6,
     y: 1.9,
@@ -170,7 +175,7 @@ export async function buildPptxBuffer(input: DeckInput): Promise<Buffer> {
         w: 9,
         fontSize: 10,
         color: INK,
-        border: { type: "solid", color: "E7E6EF", pt: 1 },
+        border: { type: "solid", color: HAIRLINE, pt: 1 },
       });
     }
 
