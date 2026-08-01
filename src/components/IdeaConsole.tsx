@@ -388,7 +388,7 @@ export default function IdeaConsole({
           {/* --- Validation tab --- */}
           {tab === "validation" && (
             <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <div className={`prose-insights text-[15px] ${streaming ? "caret" : ""}`}>
+              <div className={`prose-insights max-w-[72ch] text-[15px] ${streaming ? "caret" : ""}`}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
               </div>
               {status === "done" && research === "idle" && (

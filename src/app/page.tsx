@@ -18,7 +18,7 @@ export default async function Home({
   const initialMode = (await searchParams).mode === "discover" ? "discover" : "idea";
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:py-16">
+    <main className="mx-auto w-full max-w-6xl px-5 py-10 sm:py-16">
       {/* Header */}
       <header className="mb-10">
         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted">
@@ -63,7 +63,7 @@ export default async function Home({
       {/* Capability roadmap */}
       <section className="mt-14">
         <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted">
-          iNSIGHTS Layer 2 capabilities
+          ideaforge capabilities
         </h2>
         <p className="mb-5 text-sm text-muted">
           Problem validation is live. Here&apos;s the full copilot taking shape.
@@ -100,7 +100,7 @@ export default async function Home({
       </section>
 
       <footer className="mt-14 border-t border-border pt-6 text-center text-xs text-muted">
-        IdeaForge · iNSIGHTS Track · built in parts — Part 1: foundation &amp; problem validation
+        IdeaForge · Built in parts — Part 1: Foundation &amp; Problem Validation
       </footer>
     </main>
   );

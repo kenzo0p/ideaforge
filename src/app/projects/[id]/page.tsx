@@ -52,7 +52,7 @@ export default async function ProjectPage({
   const collab = await collaborationStateAction(id);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-5 py-8">
+    <main className="mx-auto w-full max-w-6xl px-5 py-8">
       <Link
         href="/dashboard"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted transition hover:text-foreground"

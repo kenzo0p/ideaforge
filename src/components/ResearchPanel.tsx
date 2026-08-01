@@ -41,7 +41,7 @@ export default function ResearchPanel({
   return (
     // Briefing on the left, resources rail on the right. One column until
     // there's room for two — the rail is unreadable squeezed onto a phone.
-    <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)] lg:items-start">
+    <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       {/* Header */}
       <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
@@ -75,7 +75,7 @@ export default function ResearchPanel({
       </div>
 
       {/* Summary */}
-      <div className="prose-insights text-[15px]">
+      <div className="prose-insights max-w-[68ch] text-[15px]">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.summaryMarkdown}</ReactMarkdown>
       </div>
 
@@ -85,7 +85,7 @@ export default function ResearchPanel({
           <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
             <Swords className="size-4 text-brand" /> Existing solutions
           </h3>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 xl:grid-cols-2">
             {(report.existingSolutions ?? []).map((s, i) => (
               <div key={i} className="rounded-xl border border-border bg-surface p-4">
                 <div className="flex items-center justify-between gap-2">
@@ -95,7 +95,7 @@ export default function ResearchPanel({
                   )}
                 </div>
                 <p className="mt-1 text-sm text-muted">{s.what}</p>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="mt-3 space-y-2.5 text-xs">
                   <div>
                     <div className="mb-1 font-medium text-success">Strengths</div>
                     <ul className="space-y-0.5 text-muted">
