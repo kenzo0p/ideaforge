@@ -1,6 +1,7 @@
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider, type SearchResult } from "@/lib/search";
 import { discoverResources } from "@/lib/resources";
+import { findVideos } from "@/lib/resources/youtube";
 import {
   deepResearchMessages,
   compareIdeasMessages,
@@ -30,6 +31,8 @@ import type {
   Milestone,
   ProblemDiscovery,
   ProjectPlan,
+  ResearchResources,
+  VideoResource,
   RankedIdea,
   ResearchReport,
   Resource,
@@ -137,10 +140,23 @@ class DefaultLayer2 implements Layer2Service {
       typeof parsed.summaryMarkdown === "string"
         ? parsed.summaryMarkdown
         : "_No summary was produced._";
-    const existingSolutions = Array.isArray(parsed.existingSolutions)
-      ? (parsed.existingSolutions as SolutionComparison[])
-      : [];
-    const gaps = Array.isArray(parsed.gaps) ? (parsed.gaps as ResearchGap[]) : [];
+    // Normalise here, not in the view. The model is free to omit a field, and a
+    // missing `gaps` array crashed the panel on `.map` — the UI should be able
+    // to trust the shape it's handed.
+    const existingSolutions: SolutionComparison[] = asArray<Partial<SolutionComparison>>(
+      parsed.existingSolutions,
+    ).map((x) => ({
+      name: asString(x.name, "Unnamed"),
+      what: asString(x.what, ""),
+      strengths: asArray<string>(x.strengths),
+      gaps: asArray<string>(x.gaps),
+      citations: Array.isArray(x.citations) ? x.citations.map(Number) : undefined,
+    }));
+    const gaps: ResearchGap[] = asArray<Partial<ResearchGap>>(parsed.gaps).map((x) => ({
+      title: asString(x.title, "Untitled gap"),
+      description: asString(x.description, ""),
+      opportunity: asString(x.opportunity, ""),
+    }));
 
     // Keep only the sources the briefing actually leaned on. A search that drags
     // in an off-topic page would otherwise still list it under "Sources", which
@@ -157,8 +173,43 @@ class DefaultLayer2 implements Layer2Service {
       citations,
       existingSolutions,
       gaps,
+      resources: await this.gatherResources(input.idea, signal),
       demo: searcher.isMock || getProvider().isMock,
     };
+  }
+
+  /**
+   * The reading list that sits beside a briefing: papers, repos, datasets and
+   * videos. It lives with DeepSearch rather than the build plan because it's
+   * research output — you want it while deciding, not only once you're building.
+   *
+   * Every bucket is independent: a missing key or a slow API yields an empty
+   * list rather than failing the whole report.
+   */
+  private async gatherResources(idea: string, signal?: AbortSignal): Promise<ResearchResources> {
+    const searcher = getSearchProvider();
+    const keywords = keywordsFor(idea);
+
+    const [discovered, videos] = await Promise.all([
+      discoverResources(keywords).catch(() => ({ repos: [], datasets: [], papers: [] })),
+      findVideos(keywords, 4, signal).catch(() => [] as VideoResource[]),
+    ]);
+    let { repos, datasets, papers } = discovered;
+
+    // Dedicated APIs first; fall back to categorised web results per empty bucket.
+    if (repos.length === 0 || datasets.length === 0 || papers.length === 0) {
+      const batches = await Promise.all(
+        resourceQueries(idea).map((q) =>
+          searcher.search(q, { maxResults: 3, signal }).catch(() => [] as SearchResult[]),
+        ),
+      );
+      const fallback = categorizeResources(relevantTo(idea, dedupeByUrl(batches.flat())));
+      if (repos.length === 0) repos = fallback.repos;
+      if (datasets.length === 0) datasets = fallback.datasets;
+      if (papers.length === 0) papers = fallback.papers;
+    }
+
+    return { papers, repos, datasets, videos };
   }
 
   async reviewDocument(
@@ -343,29 +394,11 @@ class DefaultLayer2 implements Layer2Service {
     const searcher = getSearchProvider();
     const provider = getProvider();
 
-    // Prefer real, dedicated sources: GitHub (repos), Kaggle (datasets),
-    // CORE (papers). Keyword queries (not the full sentence) return far better
-    // results from these APIs. Each bucket falls back to categorized web-search
-    // results when its provider isn't configured or returns nothing.
-    const discovered = await discoverResources(keywordsFor(input.idea));
-    let { repos, datasets, papers } = discovered;
-
-    if (repos.length === 0 || datasets.length === 0 || papers.length === 0) {
-      const batches = await Promise.all(
-        resourceQueries(input.idea).map((q) =>
-          searcher.search(q, { maxResults: 3, signal }).catch(() => [] as SearchResult[]),
-        ),
-      );
-      // The fallback buckets by hostname alone, so anything on github.com would
-      // be offered as "a repo for your project" no matter what it is about.
-      // Require the result to actually share vocabulary with the idea.
-      const fallback = categorizeResources(
-        relevantTo(input.idea, dedupeByUrl(batches.flat())),
-      );
-      if (repos.length === 0) repos = fallback.repos;
-      if (datasets.length === 0) datasets = fallback.datasets;
-      if (papers.length === 0) papers = fallback.papers;
-    }
+    // Resources belong to DeepSearch now and are shown on the Research tab, so
+    // reuse what it already found rather than paying for the same lookups
+    // twice. Only a plan generated without research has to discover its own.
+    const { papers, repos, datasets } =
+      research?.resources ?? (await this.gatherResources(input.idea, signal));
 
     // LLM designs the plan; it sees resource titles but never sets their URLs.
     const resourceTitles = [...repos, ...datasets, ...papers].map((r) => r.title).slice(0, 9);

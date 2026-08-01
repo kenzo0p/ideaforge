@@ -54,8 +54,29 @@ export interface ResearchReport {
   citations: Citation[];
   existingSolutions: SolutionComparison[];
   gaps: ResearchGap[];
+  /**
+   * Everything DeepSearch found to build with, gathered alongside the briefing.
+   * Optional because projects saved before resources moved here won't have it —
+   * the UI falls back to the copies still on `ProjectPlan`.
+   */
+  resources?: ResearchResources;
   /** True when results came from the offline demo provider. */
   demo: boolean;
+}
+
+/** The reading list beside a briefing: papers first, then things to build with. */
+export interface ResearchResources {
+  papers: Resource[];
+  repos: Resource[];
+  datasets: Resource[];
+  videos: VideoResource[];
+}
+
+/** A YouTube result, with the id pulled out so it can be embedded. */
+export interface VideoResource extends Resource {
+  /** YouTube video id — present only when the URL could be parsed. */
+  videoId: string;
+  channel?: string;
 }
 
 /** Output of problem validation — the Part 1 vertical slice. */

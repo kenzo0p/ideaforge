@@ -4,17 +4,13 @@ import { useState, useTransition } from "react";
 import {
   Boxes,
   Check,
-  Database,
-  ExternalLink,
-  FileText,
-  GitBranch,
   Layers,
   Milestone as MilestoneIcon,
   Plug,
   Rocket,
 } from "lucide-react";
 import { toggleMilestoneAction } from "@/lib/actions";
-import type { ProjectPlan, Resource } from "@/lib/insights/types";
+import type { ProjectPlan } from "@/lib/insights/types";
 
 export default function ProjectPlanPanel({
   plan,
@@ -191,16 +187,8 @@ export default function ProjectPlanPanel({
         </Section>
       )}
 
-      {/* Resources */}
-      {(plan.repos.length > 0 || plan.datasets.length > 0 || plan.papers.length > 0) && (
-        <Section icon={<GitBranch className="size-4 text-brand" />} title="Resources to build with">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <ResourceList icon={<GitBranch className="size-3.5" />} title="Repositories" items={plan.repos} />
-            <ResourceList icon={<Database className="size-3.5" />} title="Datasets" items={plan.datasets} />
-            <ResourceList icon={<FileText className="size-3.5" />} title="Papers" items={plan.papers} />
-          </div>
-        </Section>
-      )}
+      {/* Repos, datasets, papers and videos now live beside the DeepSearch
+          briefing on the Research tab — Project HUB is the plan, nothing else. */}
 
       {/* Knowledge clusters */}
       {plan.clusters.length > 0 && (
@@ -247,42 +235,3 @@ function Section({
   );
 }
 
-function ResourceList({
-  icon,
-  title,
-  items,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  items: Resource[];
-}) {
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted">
-        {icon}
-        {title}
-      </div>
-      {items.length === 0 ? (
-        <p className="text-xs text-muted/60">None found.</p>
-      ) : (
-        <ul className="space-y-1.5">
-          {items.map((r, i) => (
-            <li key={i}>
-              <a
-                href={r.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="group inline-flex items-baseline gap-1 text-sm text-foreground/90 hover:text-brand"
-              >
-                <span className="underline decoration-border underline-offset-2 group-hover:decoration-brand">
-                  {r.title}
-                </span>
-                <ExternalLink className="size-3 shrink-0 self-center opacity-50" />
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}

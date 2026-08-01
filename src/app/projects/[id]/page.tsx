@@ -95,7 +95,7 @@ export default async function ProjectPage({
 
         {activeTab === "research" &&
           (project.research ? (
-            <ResearchPanel report={project.research} searchProvider="Saved" />
+            <ResearchPanel report={project.research} searchProvider="Saved" plan={project.plan} />
           ) : (
             <EmptySection label="No research saved for this project." />
           ))}
