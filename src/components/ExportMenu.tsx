@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Download, FileText, Presentation, Printer } from "lucide-react";
+import { ChevronDown, Download, FileText, FileType, Presentation, Printer } from "lucide-react";
 
-// Export dropdown: Markdown (raw), PDF (print view), PPTX (real deck).
+// Export dropdown: PDF (print view), Word (editable), PPTX (deck), Markdown (raw).
 export default function ExportMenu({ projectId }: { projectId: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -36,6 +36,17 @@ export default function ExportMenu({ projectId }: { projectId: string }) {
             <span className="flex-1">
               PDF
               <span className="block text-xs text-muted">Opens print view</span>
+            </span>
+          </a>
+          <a
+            href={`/projects/${projectId}/export/docx`}
+            className={item}
+            onClick={() => setOpen(false)}
+          >
+            <FileType className="size-4 text-brand" />
+            <span className="flex-1">
+              Word
+              <span className="block text-xs text-muted">.docx — editable</span>
             </span>
           </a>
           <a

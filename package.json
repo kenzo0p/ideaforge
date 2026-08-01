@@ -12,6 +12,7 @@
     "test:db": "node --experimental-strip-types --import ./scripts/ts-resolve-register.mjs --env-file=.env.local scripts/smoke-db.mjs"
   },
   "dependencies": {
+    "docx": "^9.7.1",
     "firebase": "^12.17.0",
     "jose": "^6.2.5",
     "jszip": "^3.10.1",

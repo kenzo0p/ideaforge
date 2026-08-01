@@ -23,3 +23,14 @@ export function timeAgo(ms: number): string {
   if (day < 30) return `${day}d ago`;
   return new Date(ms).toLocaleDateString();
 }
+
+/** Filename-safe slug from a project title. Shared by every download route. */
+export function slugify(title: string, max = 50): string {
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, max) || "brief"
+  );
+}
