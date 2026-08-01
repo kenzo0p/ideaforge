@@ -3,6 +3,8 @@ import { getSearchProvider, type SearchResult } from "@/lib/search";
 import { discoverResources } from "@/lib/resources";
 import {
   deepResearchMessages,
+  compareIdeasMessages,
+  compareQueries,
   deepResearchQueries,
   documentReviewMessages,
   keywordsFor,
@@ -16,6 +18,9 @@ import type {
   ApiRecommendation,
   ArchitectureComponent,
   Citation,
+  CompareInput,
+  IdeaComparison,
+  IdeaScores,
   DiscoverInput,
   DiscoveredProblem,
   DocumentReview,
@@ -25,6 +30,7 @@ import type {
   Milestone,
   ProblemDiscovery,
   ProjectPlan,
+  RankedIdea,
   ResearchReport,
   Resource,
   ReviewPoint,
@@ -54,6 +60,9 @@ export interface Layer2Service {
 
   /** Discover real-world problems worth solving in a domain. */
   discoverProblems(input: DiscoverInput, signal?: AbortSignal): Promise<ProblemDiscovery>;
+
+  /** Score 2–3 candidate ideas against each other and rank them. */
+  compareIdeas(input: CompareInput, signal?: AbortSignal): Promise<IdeaComparison>;
 
   /** Review an uploaded deck/document and suggest concrete improvements. */
   reviewDocument(
@@ -192,6 +201,102 @@ class DefaultLayer2 implements Layer2Service {
       sectionNotes: asArray<SectionNote>(parsed.sectionNotes),
       truncated: input.truncated,
       demo: provider.isMock,
+    };
+  }
+
+  async compareIdeas(input: CompareInput, signal?: AbortSignal): Promise<IdeaComparison> {
+    const searcher = getSearchProvider();
+    const provider = getProvider();
+    const ideas = input.ideas.map((i) => i.trim()).filter(Boolean);
+
+    // One search per idea, in parallel — enough grounding to judge whether a
+    // space is already crowded, without tripling the wait.
+    const batches = await Promise.all(
+      compareQueries(ideas).map((q) =>
+        searcher.search(q, { maxResults: 3, signal }).catch(() => [] as SearchResult[]),
+      ),
+    );
+    const results = dedupeByUrl(batches.flat()).slice(0, 9);
+    const candidates: Citation[] = results.map((r, i) => ({
+      id: i + 1,
+      title: r.title,
+      url: r.url,
+      source: r.source,
+      snippet: r.content?.slice(0, 240),
+    }));
+
+    const raw = await provider.generateText({
+      messages: compareIdeasMessages(ideas, results, input.locale),
+      temperature: 0.3,
+      maxTokens: 4000,
+      json: true,
+      signal,
+    });
+    const parsed = safeParse(raw);
+
+    // Weights: a painful problem for many people is the point; feasibility
+    // keeps it shippable; differentiation stops us recommending a crowded space.
+    const WEIGHTS = { severity: 0.35, reach: 0.25, feasibility: 0.2, differentiation: 0.2 };
+    const clamp = (n: unknown) => {
+      const v = Math.round(Number(n));
+      return Number.isFinite(v) ? Math.max(1, Math.min(10, v)) : 5;
+    };
+
+    const rows = asArray<{
+      index?: number;
+      title?: string;
+      scores?: Partial<IdeaScores>;
+      verdict?: string;
+      strengths?: string[];
+      risks?: string[];
+      citations?: number[];
+    }>(parsed.ideas);
+
+    const scored = ideas.map((idea, i) => {
+      // Match on the model's 1-based index, falling back to position.
+      const row = rows.find((r) => Number(r.index) === i + 1) ?? rows[i] ?? {};
+      const scores: IdeaScores = {
+        severity: clamp(row.scores?.severity),
+        reach: clamp(row.scores?.reach),
+        feasibility: clamp(row.scores?.feasibility),
+        differentiation: clamp(row.scores?.differentiation),
+      };
+      // Ranking is ours, not the model's — the numbers on screen always explain
+      // the order, and a model that contradicts itself can't produce a bad sort.
+      const total =
+        Math.round(
+          (scores.severity * WEIGHTS.severity +
+            scores.reach * WEIGHTS.reach +
+            scores.feasibility * WEIGHTS.feasibility +
+            scores.differentiation * WEIGHTS.differentiation) *
+            10,
+        ) / 10;
+
+      return {
+        idea,
+        title: asString(row.title, `Idea ${i + 1}`),
+        scores,
+        total,
+        rank: 0,
+        verdict: asString(row.verdict, ""),
+        strengths: asArray<string>(row.strengths),
+        risks: asArray<string>(row.risks),
+        citations: Array.isArray(row.citations) ? row.citations.map(Number) : undefined,
+      } satisfies RankedIdea;
+    });
+
+    scored.sort((a, b) => b.total - a.total);
+    scored.forEach((s, i) => (s.rank = i + 1));
+
+    // Only keep sources a judgement actually leaned on.
+    const cited = new Set(scored.flatMap((s) => s.citations ?? []));
+    const sources = cited.size ? candidates.filter((c) => cited.has(c.id)) : candidates;
+
+    return {
+      ideas: scored,
+      rationale: asString(parsed.rationale, ""),
+      sources,
+      demo: searcher.isMock || provider.isMock,
     };
   }
 

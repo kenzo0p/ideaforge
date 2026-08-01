@@ -12,6 +12,7 @@ import {
   Lightbulb,
   Loader2,
   Rocket,
+  Scale,
   Search,
   Sparkles,
   Square,
@@ -23,6 +24,7 @@ import ProjectPlanPanel from "@/components/ProjectPlanPanel";
 import DiscoverPanel from "@/components/DiscoverPanel";
 import ResultTabs from "@/components/ResultTabs";
 import ReviewPanel from "@/components/ReviewPanel";
+import ComparePanel from "@/components/ComparePanel";
 import { USAGE_EVENT } from "@/components/UsageMeter";
 import { saveProjectAction } from "@/lib/actions";
 import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
@@ -42,7 +44,7 @@ const LANGUAGES: Array<{ code: string; label: string }> = [
 type Status = "idle" | "streaming" | "done" | "error";
 type ResearchStatus = "idle" | "loading" | "done" | "error";
 type ResultTab = "validation" | "research" | "plan";
-type ConsoleMode = "idea" | "discover" | "review";
+type ConsoleMode = "idea" | "discover" | "compare" | "review";
 
 export default function IdeaConsole({
   isAuthed = false,
@@ -251,12 +253,25 @@ export default function IdeaConsole({
         <button onClick={() => setMode("discover")} className={modeBtn(mode === "discover")}>
           <Lightbulb className="size-4" /> Find a problem
         </button>
+        <button onClick={() => setMode("compare")} className={modeBtn(mode === "compare")}>
+          <Scale className="size-4" /> Compare ideas
+        </button>
         <button onClick={() => setMode("review")} className={modeBtn(mode === "review")}>
           <Upload className="size-4" /> Review my deck
         </button>
       </div>
 
       {mode === "review" && <ReviewPanel locale={locale} />}
+
+      {mode === "compare" && (
+        <ComparePanel
+          locale={locale}
+          onForge={(idea) => {
+            setMode("idea");
+            analyze(idea);
+          }}
+        />
+      )}
 
       {mode === "discover" && (
         <DiscoverPanel

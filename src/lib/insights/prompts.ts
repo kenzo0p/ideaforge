@@ -234,6 +234,74 @@ Provide 4–6 distinct problems. Respond in locale "${locale}".`,
   ];
 }
 
+/** One search per candidate idea — enough to ground the comparison, cheap enough to stay fast. */
+export function compareQueries(ideas: string[]): string[] {
+  return ideas.map((idea) => `${deriveTopic(idea)} existing solutions`);
+}
+
+/**
+ * Idea comparison prompt.
+ *
+ * All candidates go in a single call on purpose. Scoring them independently and
+ * sorting afterwards produces uncalibrated numbers — every idea comes back a 7.
+ * Judging them against each other forces real separation.
+ *
+ * The model scores; it does not rank. The weighted total and the ordering are
+ * computed in code so the verdict can never contradict the numbers on screen.
+ */
+export function compareIdeasMessages(
+  ideas: string[],
+  results: SearchResult[],
+  locale = "en",
+): ChatMessage[] {
+  const context = results
+    .map((r, i) => `[${i + 1}] ${r.title} — ${r.source}\n${r.content}`)
+    .join("\n\n");
+  const list = ideas.map((idea, i) => `IDEA ${i + 1}: ${idea}`).join("\n");
+
+  return [
+    {
+      role: "system",
+      content: `[[TASK:idea-comparison]]
+You are iNSIGHTS Idea Comparison. You are given ${ideas.length} candidate ideas
+and numbered SOURCES. Judge the ideas AGAINST EACH OTHER and score each on four
+axes from 1 to 10.
+
+Scoring rules — follow these or the comparison is useless:
+- Score relatively. Spread the numbers out. If two ideas differ, their scores
+  must differ. Do not give everything 6–8.
+- Use the full range. A weak idea should score 2–3, not 5.
+- severity: how badly the problem hurts the people who have it.
+- reach: how many people genuinely have this problem.
+- feasibility: how realistically a small team ships a working version fast.
+- differentiation: how much room is left once existing solutions are counted.
+  If the sources show this is a crowded space, this score must be low.
+- Be willing to say an idea is weak. A comparison where everything wins is
+  worthless to the person choosing.
+
+Cite [n] markers where a source informs a judgement. Never invent statistics.
+
+Return a STRICT JSON object (no markdown fences) with this shape:
+{
+  "ideas": [
+    {
+      "index": 1,
+      "title": "3–5 word label for this idea",
+      "scores": { "severity": 7, "reach": 5, "feasibility": 8, "differentiation": 4 },
+      "verdict": "one sentence on whether this is worth building",
+      "strengths": ["what genuinely works about it"],
+      "risks": ["the thing most likely to kill it"],
+      "citations": [1]
+    }
+  ],
+  "rationale": "2–3 sentences on why the strongest idea beats the others SPECIFICALLY — name the trade-off you made"
+}
+Include every idea, with "index" matching its number above. Respond in locale "${locale}".`,
+    },
+    { role: "user", content: `${list}\n\nSOURCES:\n${context}` },
+  ];
+}
+
 /** Agent reply prompt — answers a user's question grounded in project context. */
 export function agentReplyMessages(
   question: string,

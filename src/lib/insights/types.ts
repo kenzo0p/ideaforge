@@ -128,6 +128,51 @@ export interface DiscoverInput {
   locale?: string;
 }
 
+// --- Idea comparison -------------------------------------------------------
+
+/** The four axes every candidate idea is scored on, 1–10. */
+export interface IdeaScores {
+  /** How badly the problem hurts the people who have it. */
+  severity: number;
+  /** How many people have it. */
+  reach: number;
+  /** How realistically it ships with a small team and a short runway. */
+  feasibility: number;
+  /** How much room is left once existing solutions are accounted for. */
+  differentiation: number;
+}
+
+export interface RankedIdea {
+  /** The idea exactly as the user typed it. */
+  idea: string;
+  /** Short label for the column header. */
+  title: string;
+  scores: IdeaScores;
+  /** Weighted total, computed in code — never taken from the model. */
+  total: number;
+  /** 1-based position after ranking. */
+  rank: number;
+  verdict: string;
+  strengths: string[];
+  risks: string[];
+  /** 1-based indices into `sources`. */
+  citations?: number[];
+}
+
+export interface IdeaComparison {
+  /** Ranked best-first. */
+  ideas: RankedIdea[];
+  /** Why the winner beats the others — comparative, not standalone praise. */
+  rationale: string;
+  sources: Citation[];
+  demo: boolean;
+}
+
+export interface CompareInput {
+  ideas: string[];
+  locale?: string;
+}
+
 // --- Project HUB (Part 3) --------------------------------------------------
 
 export interface TechStackItem {
