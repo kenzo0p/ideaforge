@@ -14,6 +14,7 @@ import ShareProject from "@/components/ShareProject";
 import Collaborators from "@/components/Collaborators";
 import CommentThread from "@/components/CommentThread";
 import { collaborationStateAction } from "@/lib/collab-actions";
+import RealtimeRefresh from "@/components/RealtimeRefresh";
 import { getMilestoneProgress, getProject, listWorkspaceItems } from "@/lib/db/projects";
 import { listRemindersForProject, listReminderLogs } from "@/lib/db/reminders";
 import { isTelegramLinked } from "@/lib/db/telegram";
@@ -129,6 +130,8 @@ export default async function ProjectPage({
             {collab && (
               <CommentThread projectId={project.id} comments={collab.comments} meId={collab.me} />
             )}
+            {/* A teammate's comment or join lands here without a refresh. */}
+            <RealtimeRefresh projectId={project.id} />
             {/* Sharing is the owner's call — a collaborator shouldn't be able to
                 publish someone else's project to the open web. */}
             {collab?.isOwner && (

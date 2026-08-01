@@ -10,6 +10,8 @@ import {
 import { sendVerificationEmail } from "@/lib/email/verification";
 import { hashPassword, verifyPassword } from "./password";
 import { endSession, startSession } from "./session";
+import { getMailer } from "@/lib/email";
+import { markEmailVerified } from "@/lib/db/users";
 
 export interface AuthState {
   error?: string;
@@ -49,6 +51,16 @@ export async function signUpAction(_prev: AuthState, formData: FormData): Promis
   if (await getUserByEmail(email)) return { error: "An account with that email already exists." };
 
   const user = await createUser(email, hashPassword(password), name);
+
+  // With no mail provider configured there is no way to complete verification,
+  // so requiring it would lock every new account out. Activate immediately and
+  // sign them in. When SMTP *is* configured we still verify properly.
+  if (getMailer().isConsole) {
+    await markEmailVerified(user.id);
+    await startSession(user.id);
+    redirect(safeInternalPath(formData.get("next")));
+  }
+
   // No session yet — the account must be verified first (startVerification redirects).
   await startVerification(user.id, email);
   return {};

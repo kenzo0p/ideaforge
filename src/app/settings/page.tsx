@@ -29,7 +29,7 @@ export default async function SettingsPage() {
 
       <div className="space-y-5">
         <Card icon={<User className="size-4 text-brand" />} title="Profile">
-          <ProfileForm name={user.name} locale={user.locale} email={user.email} />
+          <ProfileForm name={user.name} locale={user.locale} email={user.email} username={user.username} />
         </Card>
 
         {telegramConfigured && (

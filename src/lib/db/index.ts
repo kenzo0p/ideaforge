@@ -132,12 +132,42 @@ async function connect(): Promise<Db> {
 
   const db = client.db(DB_NAME);
   await ensureIndexes(db);
+  await backfillUsernames(db);
   return db;
 }
 
 /** Typed handle to a collection. */
 export async function col<T extends Document>(name: string): Promise<Collection<T>> {
   return (await getDb()).collection<T>(name);
+}
+
+/**
+ * Give pre-username accounts a handle.
+ *
+ * Runs once on connect and does nothing when there's nothing to fix, so it
+ * costs a single indexed count on every boot after the first.
+ */
+async function backfillUsernames(db: Db): Promise<void> {
+  const users = db.collection<{ _id: string; email: string; name?: string | null; username?: string }>("users");
+  const missing = await users.find({ username: { $exists: false } }).limit(500).toArray();
+  if (missing.length === 0) return;
+
+  const { suggestUsername, USERNAME_MAX } = await import("@/lib/username");
+  const taken = new Set(
+    (await users.find({ username: { $exists: true } }, { projection: { username: 1 } }).toArray())
+      .map((u) => u.username!),
+  );
+
+  for (const u of missing) {
+    const base = suggestUsername(u.name || u.email);
+    let candidate = base;
+    for (let n = 2; taken.has(candidate); n++) {
+      candidate = `${base.slice(0, USERNAME_MAX - String(n).length)}${n}`;
+    }
+    taken.add(candidate);
+    await users.updateOne({ _id: u._id }, { $set: { username: candidate } });
+  }
+  console.log(`Assigned usernames to ${missing.length} existing account(s).`);
 }
 
 // --- Indexes ---------------------------------------------------------------
@@ -148,6 +178,9 @@ async function ensureIndexes(db: Db): Promise<void> {
 
   await Promise.all([
     db.collection("users").createIndex({ email: 1 }, { unique: true }),
+    // Sparse so accounts predating usernames don't collide on a missing field;
+    // backfillUsernames() fills them in on boot.
+    db.collection("users").createIndex({ username: 1 }, { unique: true, sparse: true }),
 
     db.collection("sessions").createIndex({ userId: 1 }),
     db.collection("sessions").createIndex({ expiresAt: 1 }, ttl),

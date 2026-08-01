@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { col } from "./index";
+import { normalizeUsername, suggestUsername, USERNAME_MAX } from "@/lib/username";
 
 // ---------------------------------------------------------------------------
 // Users + sessions repository
@@ -8,6 +9,8 @@ import { col } from "./index";
 export interface User {
   id: string;
   email: string;
+  /** Unique handle used to invite people — the public identifier, not email. */
+  username: string;
   name: string | null;
   emailVerified: boolean;
   /** Preferred output language (BCP-47), or null to use the UI default. */
@@ -20,6 +23,8 @@ export interface User {
 interface UserDoc {
   _id: string;
   email: string;
+  /** Stored lowercase; the unique index is on this field. */
+  username: string;
   name: string | null;
   /** Absent for accounts created purely through Google — there is no password. */
   passwordHash?: string;
@@ -52,12 +57,72 @@ function toUser(d: UserDoc): User {
   return {
     id: d._id,
     email: d.email,
+    // Accounts created before usernames existed fall back to the local part of
+    // their email so the UI never renders an empty handle.
+    username: d.username ?? d.email.split("@")[0],
     name: d.name ?? null,
     emailVerified: !!d.emailVerified,
     locale: d.locale ?? null,
     notificationsSeenAt: d.notificationsSeenAt ?? 0,
     createdAt: d.createdAt,
   };
+}
+
+/**
+ * Claim a free handle near `desired`.
+ *
+ * Appends a counter on collision. Racy in principle — two signups could pick
+ * the same handle between the check and the insert — which is why the unique
+ * index on `username` is the real guarantee and insert failures retry.
+ */
+export async function allocateUsername(desired: string): Promise<string> {
+  const c = await users();
+  const base = suggestUsername(desired);
+  if (!(await c.countDocuments({ username: base }, { limit: 1 }))) return base;
+
+  for (let n = 2; n < 200; n++) {
+    const candidate = `${base.slice(0, USERNAME_MAX - String(n).length)}${n}`;
+    if (!(await c.countDocuments({ username: candidate }, { limit: 1 }))) return candidate;
+  }
+  // Pathological case: fall back to something that cannot realistically clash.
+  return `${base.slice(0, 12)}${Date.now().toString(36).slice(-6)}`;
+}
+
+export async function getUserByUsername(username: string): Promise<User | null> {
+  const d = await (await users()).findOne({ username: normalizeUsername(username) });
+  return d ? toUser(d) : null;
+}
+
+export async function isUsernameTaken(username: string, exceptUserId?: string): Promise<boolean> {
+  const filter: Record<string, unknown> = { username: normalizeUsername(username) };
+  if (exceptUserId) filter._id = { $ne: exceptUserId };
+  return (await (await users()).countDocuments(filter, { limit: 1 })) > 0;
+}
+
+/** Change a handle. Returns false when it's already taken. */
+export async function updateUsername(userId: string, username: string): Promise<boolean> {
+  const clean = normalizeUsername(username);
+  if (await isUsernameTaken(clean, userId)) return false;
+  try {
+    await (await users()).updateOne({ _id: userId }, { $set: { username: clean } });
+    return true;
+  } catch {
+    // Unique index rejected it — someone claimed it in between.
+    return false;
+  }
+}
+
+/** Handle search for the invite box. Prefix match, excluding the searcher. */
+export async function searchUsers(query: string, excludeUserId: string, limit = 5): Promise<User[]> {
+  const q = normalizeUsername(query);
+  if (q.length < 2) return [];
+  // Escape so a user typing regex characters can't craft an expensive pattern.
+  const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const docs = await (await users())
+    .find({ username: { $regex: `^${safe}` }, _id: { $ne: excludeUserId } })
+    .limit(limit)
+    .toArray();
+  return docs.map(toUser);
 }
 
 export async function createUser(
@@ -70,6 +135,7 @@ export async function createUser(
   const doc: UserDoc = {
     _id: randomUUID(),
     email,
+    username: await allocateUsername(name || email),
     name: name ?? null,
     passwordHash,
     emailVerified: false,
@@ -255,6 +321,7 @@ export async function upsertGoogleUser(identity: {
   const doc: UserDoc = {
     _id: randomUUID(),
     email: identity.email,
+    username: await allocateUsername(identity.name || identity.email),
     name: identity.name,
     emailVerified: true,
     locale: null,

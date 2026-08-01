@@ -60,10 +60,12 @@ export function ProfileForm({
   name,
   locale,
   email,
+  username,
 }: {
   name: string | null;
   locale: string | null;
   email: string;
+  username: string;
 }) {
   const [state, action] = useActionState<SettingsState, FormData>(updateProfileAction, {});
   return (
@@ -71,6 +73,24 @@ export function ProfileForm({
       <label className="block">
         <span className="mb-1 block text-xs font-medium text-muted">Email</span>
         <input value={email} readOnly disabled className={`${input} opacity-60`} />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-muted">Username</span>
+        <div className="relative">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">
+            @
+          </span>
+          <input
+            name="username"
+            defaultValue={username}
+            spellCheck={false}
+            autoComplete="off"
+            className={`${input} pl-7`}
+          />
+        </div>
+        <span className="mt-1 block text-xs text-muted">
+          How teammates invite you to a project.
+        </span>
       </label>
       <label className="block">
         <span className="mb-1 block text-xs font-medium text-muted">Name</span>

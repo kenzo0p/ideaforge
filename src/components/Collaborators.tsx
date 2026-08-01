@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Check, Copy, Crown, LogOut, Mail, Send, UserPlus, X } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { AtSign, Clock, Crown, LogOut, Send, UserPlus, X } from "lucide-react";
 import {
   inviteCollaboratorAction,
   removeMemberAction,
   revokeInviteAction,
+  searchUsernamesAction,
 } from "@/lib/collab-actions";
 import type { ProjectMember } from "@/lib/db/projects";
 import type { ProjectInvite } from "@/lib/db/collaboration";
@@ -19,11 +20,12 @@ function Avatar({ label }: { label: string }) {
 }
 
 /**
- * Members, pending invitations, and the invite form.
+ * Members, pending invitations, and the invite box.
  *
- * The owner sees everything; a collaborator sees the roster and a "leave"
- * button. Permissions are enforced in the server actions — this only decides
- * what's worth rendering.
+ * People are invited by handle, not email — the invitation lands in their
+ * notifications inside the app, so nothing depends on a mail provider.
+ * Permissions are enforced in the server actions; this only decides what's
+ * worth rendering.
  */
 export default function Collaborators({
   projectId,
@@ -40,21 +42,48 @@ export default function Collaborators({
   invites: ProjectInvite[];
   meId: string;
 }) {
-  const [email, setEmail] = useState("");
+  const [query, setQuery] = useState("");
+  const [matches, setMatches] = useState<{ username: string; name: string | null }[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [link, setLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const boxRef = useRef<HTMLDivElement>(null);
 
-  function invite() {
+  // Debounced handle lookup — one request per pause, not per keystroke.
+  useEffect(() => {
+    const q = query.trim().replace(/^@/, "");
+    let live = true;
+    const t = setTimeout(async () => {
+      // Short queries clear the list rather than searching — done inside the
+      // timer so no state is set synchronously during the effect.
+      const found = q.length < 2 ? [] : await searchUsernamesAction(q);
+      if (live) setMatches(found);
+    }, 220);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [query]);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setMatches([]);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  function invite(handle?: string) {
+    const target = (handle ?? query).trim().replace(/^@/, "");
+    if (!target) return;
     setError(null);
-    setLink(null);
+    setSent(null);
+    setMatches([]);
     start(async () => {
-      const res = await inviteCollaboratorAction(projectId, email);
+      const res = await inviteCollaboratorAction(projectId, target);
       if (res.error) return setError(res.error);
-      setEmail("");
-      // Delivery failed but the invitation is real — offer the link instead.
-      if (res.inviteLink) setLink(res.inviteLink);
+      setQuery("");
+      setSent(target);
     });
   }
 
@@ -82,10 +111,10 @@ export default function Collaborators({
 
         {members.map((m) => (
           <li key={m.userId} className="flex items-center gap-2.5">
-            <Avatar label={m.name ?? m.email} />
+            <Avatar label={m.name ?? m.username} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm">{m.name ?? m.email}</p>
-              <p className="truncate text-xs text-muted">{m.email}</p>
+              <p className="truncate text-sm">{m.name ?? m.username}</p>
+              <p className="truncate text-xs text-muted">@{m.username}</p>
             </div>
             {(isOwner || m.userId === meId) && (
               <button
@@ -103,17 +132,17 @@ export default function Collaborators({
       {isOwner && invites.length > 0 && (
         <ul className="mt-3 space-y-2 border-t border-border pt-3">
           {invites.map((inv) => (
-            <li key={inv.token} className="flex items-center gap-2.5">
+            <li key={inv.id} className="flex items-center gap-2.5">
               <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface">
-                <Mail className="size-3.5 text-muted" />
+                <Clock className="size-3.5 text-muted" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-muted">{inv.email}</p>
+                <p className="truncate text-sm text-muted">@{inv.toUsername}</p>
                 <p className="text-xs text-muted">Invitation pending</p>
               </div>
               <button
-                onClick={() => start(async () => void (await revokeInviteAction(projectId, inv.email)))}
-                title="Revoke invitation"
+                onClick={() => start(async () => void (await revokeInviteAction(projectId, inv.toUserId)))}
+                title="Cancel invitation"
                 className="rounded-md p-1.5 text-muted transition hover:bg-hover hover:text-danger"
               >
                 <X className="size-3.5" />
@@ -125,47 +154,60 @@ export default function Collaborators({
 
       {isOwner && (
         <div className="mt-4 border-t border-border pt-4">
-          <div className="flex gap-2">
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && invite()}
-              placeholder="teammate@example.com"
-              className="w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm outline-none focus:border-brand/60"
-            />
-            <button
-              onClick={invite}
-              disabled={pending || !email.trim()}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-solid px-3.5 py-2 text-sm font-semibold text-on-brand transition hover:opacity-90 disabled:opacity-50"
-            >
-              <Send className="size-3.5" /> {pending ? "Inviting…" : "Invite"}
-            </button>
+          <div ref={boxRef} className="relative">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <AtSign className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && invite()}
+                  placeholder="username"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full rounded-lg border border-border-strong bg-surface py-2 pl-8 pr-3 text-sm outline-none focus:border-brand/60"
+                />
+              </div>
+              <button
+                onClick={() => invite()}
+                disabled={pending || !query.trim()}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-solid px-3.5 py-2 text-sm font-semibold text-on-brand transition hover:opacity-90 disabled:opacity-50"
+              >
+                <Send className="size-3.5" /> {pending ? "Inviting…" : "Invite"}
+              </button>
+            </div>
+
+            {matches.length > 0 && (
+              <ul className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg">
+                {matches.map((m) => (
+                  <li key={m.username}>
+                    <button
+                      onClick={() => invite(m.username)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-hover"
+                    >
+                      <Avatar label={m.name ?? m.username} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm">{m.name ?? m.username}</span>
+                        <span className="block truncate text-xs text-muted">@{m.username}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+
+          <p className="mt-2 text-xs text-muted">
+            They&apos;ll see the invitation in their notifications — no email needed.
+          </p>
 
           {error && (
             <p role="alert" className="mt-2 text-sm text-danger">
               {error}
             </p>
           )}
-
-          {link && (
-            <div className="mt-3 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
-              <p className="mb-2 text-warning">
-                Couldn&apos;t email them — the invitation is valid, so send this link yourself.
-              </p>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(link);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border-strong bg-card px-3 py-1.5 text-xs font-medium transition hover:bg-hover"
-              >
-                {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
-                {copied ? "Copied" : "Copy invite link"}
-              </button>
-            </div>
+          {sent && !error && (
+            <p className="mt-2 text-sm text-success">Invitation sent to @{sent}.</p>
           )}
         </div>
       )}

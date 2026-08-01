@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import { Bell, Check, Send } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listAllReminderLogs } from "@/lib/db/reminders";
+import { listInvitesForUser } from "@/lib/db/collaboration";
+import InviteInbox from "@/components/InviteInbox";
+import RealtimeRefresh from "@/components/RealtimeRefresh";
 import { markNotificationsSeen } from "@/lib/db/users";
 import { timeAgo } from "@/lib/format";
 
@@ -14,7 +17,10 @@ export default async function NotificationsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
 
-  const notifications = await listAllReminderLogs(user.id);
+  const [notifications, invites] = await Promise.all([
+    listAllReminderLogs(user.id),
+    listInvitesForUser(user.id),
+  ]);
   const seenAt = user.notificationsSeenAt;
   // Clear the badge for future page loads (this render still highlights new items).
   await markNotificationsSeen(user.id);
@@ -26,8 +32,12 @@ export default async function NotificationsPage() {
         Notifications
       </h1>
       <p className="mb-8 text-sm text-muted">
-        Reminder nudges sent by your agent, across every project.
+        Project invitations and reminder nudges, across everything you work on.
       </p>
+
+      {/* Live: an invitation sent while this page is open appears immediately. */}
+      <RealtimeRefresh />
+      <InviteInbox invites={invites} />
 
       {notifications.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 p-12 text-center">

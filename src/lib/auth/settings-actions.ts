@@ -2,12 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { normalizeUsername, validateUsername } from "@/lib/username";
 import {
   deleteUser,
   getUserByEmail,
   updateUserLocale,
   updateUserName,
   updateUserPassword,
+  updateUsername,
 } from "@/lib/db/users";
 import { hashPassword, verifyPassword } from "./password";
 import { endSession, getCurrentUser } from "./session";
@@ -30,6 +32,17 @@ export async function updateProfileAction(
   const user = await requireUser();
   const name = String(formData.get("name") ?? "").trim() || null;
   const locale = String(formData.get("locale") ?? "en").trim();
+  const username = String(formData.get("username") ?? "").trim();
+
+  // The handle is how teammates find you, so it changes only when it's valid
+  // and free — and the save is rejected rather than silently partial.
+  if (username && normalizeUsername(username) !== user.username) {
+    const invalid = validateUsername(username);
+    if (invalid) return { error: invalid };
+    if (!(await updateUsername(user.id, username))) {
+      return { error: `@${normalizeUsername(username)} is already taken.` };
+    }
+  }
 
   await updateUserName(user.id, name);
   await updateUserLocale(user.id, locale);

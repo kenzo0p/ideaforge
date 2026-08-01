@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
-import { sendProjectInviteEmail } from "@/lib/email/verification";
 import {
   addComment,
+  consumeInviteFor,
   createInvite,
   listComments,
   listInvites,
@@ -12,7 +12,10 @@ import {
   deleteComment,
   type CommentAnchor,
 } from "@/lib/db/collaboration";
-import { getProject, isProjectOwner, listMembers, removeMember } from "@/lib/db/projects";
+import { addMember, getProject, isProjectOwner, listMembers, removeMember } from "@/lib/db/projects";
+import { getUserByUsername, searchUsers } from "@/lib/db/users";
+import { normalizeUsername, validateUsername } from "@/lib/username";
+import { publish } from "@/lib/realtime";
 
 // ---------------------------------------------------------------------------
 // Collaboration server actions.
@@ -23,12 +26,8 @@ import { getProject, isProjectOwner, listMembers, removeMember } from "@/lib/db/
 // Neither trusts an id from the client — the actor always comes from the session.
 // ---------------------------------------------------------------------------
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export interface CollabState {
   error?: string;
-  /** Surfaced when the invite couldn't be emailed, so it can still be copied. */
-  inviteLink?: string;
   ok?: boolean;
 }
 
@@ -43,51 +42,93 @@ async function requireOwner(projectId: string) {
   return { user };
 }
 
+/** Handle suggestions for the invite box. */
+export async function searchUsernamesAction(query: string) {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  const found = await searchUsers(query, user.id, 5);
+  return found.map((u) => ({ username: u.username, name: u.name }));
+}
+
 export async function inviteCollaboratorAction(
   projectId: string,
-  email: string,
+  username: string,
 ): Promise<CollabState> {
   const gate = await requireOwner(projectId);
   if ("error" in gate) return { error: gate.error };
   const { user } = gate;
 
-  const clean = email.trim().toLowerCase();
-  if (!EMAIL_RE.test(clean)) return { error: "Enter a valid email address." };
-  if (clean === user.email.toLowerCase()) return { error: "That's you — you already own this." };
+  const handle = normalizeUsername(username);
+  const invalid = validateUsername(handle);
+  if (invalid) return { error: invalid };
+  if (handle === user.username) return { error: "That's you — you already own this." };
+
+  const target = await getUserByUsername(handle);
+  if (!target) return { error: `No one here goes by @${handle}.` };
 
   const project = await getProject(projectId, user.id);
   if (!project) return { error: "Project not found." };
 
   const roster = await listMembers(projectId, user.id);
-  if (roster?.members.some((m) => m.email === clean)) {
+  if (roster?.members.some((m) => m.userId === target.id)) {
     return { error: "They're already on this project." };
   }
 
-  const invite = await createInvite({
+  await createInvite({
     projectId,
-    email: clean,
+    projectTitle: project.title,
+    toUserId: target.id,
+    toUsername: target.username,
     invitedByUserId: user.id,
-    invitedByName: user.name ?? user.email,
+    invitedByName: user.name ?? user.username,
+    invitedByUsername: user.username,
   });
 
-  const { link, delivered } = await sendProjectInviteEmail(
-    clean,
-    invite.token,
-    project.title,
-    user.name ?? user.email,
-  );
-
+  // Nudge their open tabs so the invitation shows up without a refresh.
+  publish(`user:${target.id}`, { type: "invite" });
   revalidatePath(`/projects/${projectId}`);
-  // When delivery fails the invite is still valid — hand back the link so the
-  // owner can pass it on themselves rather than hitting a dead end.
-  return delivered ? { ok: true } : { ok: true, inviteLink: link };
+  return { ok: true };
 }
 
-export async function revokeInviteAction(projectId: string, email: string): Promise<CollabState> {
+export async function revokeInviteAction(
+  projectId: string,
+  toUserId: string,
+): Promise<CollabState> {
   const gate = await requireOwner(projectId);
   if ("error" in gate) return { error: gate.error };
-  await revokeInvite(projectId, email);
+  await revokeInvite(projectId, toUserId);
+  publish(`user:${toUserId}`, { type: "invite" });
   revalidatePath(`/projects/${projectId}`);
+  return { ok: true };
+}
+
+/** Accept an invitation from the notifications page. */
+export async function acceptInviteAction(inviteId: string): Promise<CollabState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in first." };
+
+  // Scoped to the recipient inside the repo — an id alone grants nothing.
+  const invite = await consumeInviteFor(inviteId, user.id);
+  if (!invite) return { error: "That invitation is no longer valid." };
+
+  await addMember(invite.projectId, {
+    userId: user.id,
+    email: user.email,
+    username: user.username,
+    name: user.name,
+    joinedAt: Date.now(),
+  });
+  publish(`project:${invite.projectId}`, { type: "members" });
+  revalidatePath("/notifications");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
+export async function declineInviteAction(inviteId: string): Promise<CollabState> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Sign in first." };
+  await consumeInviteFor(inviteId, user.id);
+  revalidatePath("/notifications");
   return { ok: true };
 }
 
@@ -100,6 +141,7 @@ export async function removeMemberAction(
   if (!user) return { error: "Sign in first." };
   const done = await removeMember(projectId, user.id, targetUserId);
   if (!done) return { error: "Couldn't remove that person." };
+  publish(`project:${projectId}`, { type: "members", actorId: user.id });
   revalidatePath(`/projects/${projectId}`);
   return { ok: true };
 }
@@ -121,10 +163,11 @@ export async function addCommentAction(
   await addComment({
     projectId,
     userId: user.id,
-    authorName: user.name ?? user.email,
+    authorName: user.name ?? user.username,
     anchor,
     body: text,
   });
+  publish(`project:${projectId}`, { type: "comment", actorId: user.id });
   revalidatePath(`/projects/${projectId}`);
   return { ok: true };
 }
@@ -137,6 +180,7 @@ export async function deleteCommentAction(
   if (!user) return { error: "Sign in first." };
   // Scoped to the author inside the repo, so this can't delete someone else's.
   await deleteComment(commentId, user.id);
+  publish(`project:${projectId}`, { type: "comment", actorId: user.id });
   revalidatePath(`/projects/${projectId}`);
   return { ok: true };
 }

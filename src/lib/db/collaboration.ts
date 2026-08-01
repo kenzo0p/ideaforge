@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { col } from "./index";
 
 // ---------------------------------------------------------------------------
@@ -11,13 +11,23 @@ import { col } from "./index";
 // that is fetched in full on every page load.
 // ---------------------------------------------------------------------------
 
-const INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
+const INVITE_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
 
+/**
+ * An invitation addressed to an existing account.
+ *
+ * There is no emailed token any more: the invitee already has an account, so
+ * the invitation is a row they see in their own notifications and accept from
+ * inside the app. Nothing leaves the system, and no mail provider is involved.
+ */
 export interface ProjectInvite {
-  token: string;
+  id: string;
   projectId: string;
-  email: string;
+  projectTitle: string;
+  toUserId: string;
+  toUsername: string;
   invitedByName: string;
+  invitedByUsername: string;
   createdAt: number;
   expiresAt: number;
 }
@@ -25,9 +35,12 @@ export interface ProjectInvite {
 interface InviteDoc {
   _id: string;
   projectId: string;
-  email: string;
+  projectTitle: string;
+  toUserId: string;
+  toUsername: string;
   invitedByUserId: string;
   invitedByName: string;
+  invitedByUsername: string;
   createdAt: number;
   /** Date, so the TTL index reaps stale invitations. */
   expiresAt: Date;
@@ -68,64 +81,70 @@ const comments = () => col<CommentDoc>("projectComments");
  * another, so a resent invite invalidates the first — a link someone forwarded
  * on can't outlive the one you meant to send.
  */
+function toInvite(d: InviteDoc): ProjectInvite {
+  return {
+    id: d._id,
+    projectId: d.projectId,
+    projectTitle: d.projectTitle,
+    toUserId: d.toUserId,
+    toUsername: d.toUsername,
+    invitedByName: d.invitedByName,
+    invitedByUsername: d.invitedByUsername,
+    createdAt: d.createdAt,
+    expiresAt: d.expiresAt.getTime(),
+  };
+}
+
 export async function createInvite(input: {
   projectId: string;
-  email: string;
+  projectTitle: string;
+  toUserId: string;
+  toUsername: string;
   invitedByUserId: string;
   invitedByName: string;
+  invitedByUsername: string;
 }): Promise<ProjectInvite> {
   const c = await invites();
-  const email = input.email.trim().toLowerCase();
-  await c.deleteMany({ projectId: input.projectId, email });
+  // One live invitation per person per project — re-inviting refreshes it.
+  await c.deleteMany({ projectId: input.projectId, toUserId: input.toUserId });
 
   const now = Date.now();
   const doc: InviteDoc = {
-    _id: randomBytes(24).toString("hex"),
+    _id: randomUUID(),
     projectId: input.projectId,
-    email,
+    projectTitle: input.projectTitle,
+    toUserId: input.toUserId,
+    toUsername: input.toUsername,
     invitedByUserId: input.invitedByUserId,
     invitedByName: input.invitedByName,
+    invitedByUsername: input.invitedByUsername,
     createdAt: now,
     expiresAt: new Date(now + INVITE_TTL_MS),
   };
   await c.insertOne(doc);
-  return {
-    token: doc._id,
-    projectId: doc.projectId,
-    email: doc.email,
-    invitedByName: doc.invitedByName,
-    createdAt: doc.createdAt,
-    expiresAt: doc.expiresAt.getTime(),
-  };
+  return toInvite(doc);
 }
 
-/** Read an invitation without consuming it (to render the accept screen). */
-export async function peekInvite(token: string): Promise<ProjectInvite | null> {
-  const d = await (await invites()).findOne({ _id: token });
-  // TTL sweeps are periodic, so check the deadline ourselves too.
-  if (!d || d.expiresAt.getTime() < Date.now()) return null;
-  return {
-    token: d._id,
-    projectId: d.projectId,
-    email: d.email,
-    invitedByName: d.invitedByName,
-    createdAt: d.createdAt,
-    expiresAt: d.expiresAt.getTime(),
-  };
+/** Invitations waiting for this person — drives the notifications badge. */
+export async function listInvitesForUser(userId: string): Promise<ProjectInvite[]> {
+  const docs = await (await invites())
+    .find({ toUserId: userId, expiresAt: { $gt: new Date() } })
+    .sort({ createdAt: -1 })
+    .toArray();
+  return docs.map(toInvite);
 }
 
-/** Consume an invitation. Single use — the token dies whether or not it was valid. */
-export async function consumeInvite(token: string): Promise<ProjectInvite | null> {
-  const d = await (await invites()).findOneAndDelete({ _id: token });
+/**
+ * Accept or decline. Scoped to the recipient, so possessing an id is not enough
+ * — only the person it was addressed to can act on it.
+ */
+export async function consumeInviteFor(
+  inviteId: string,
+  userId: string,
+): Promise<ProjectInvite | null> {
+  const d = await (await invites()).findOneAndDelete({ _id: inviteId, toUserId: userId });
   if (!d || d.expiresAt.getTime() < Date.now()) return null;
-  return {
-    token: d._id,
-    projectId: d.projectId,
-    email: d.email,
-    invitedByName: d.invitedByName,
-    createdAt: d.createdAt,
-    expiresAt: d.expiresAt.getTime(),
-  };
+  return toInvite(d);
 }
 
 /** Outstanding invitations on a project, for the owner's members list. */
@@ -134,18 +153,11 @@ export async function listInvites(projectId: string): Promise<ProjectInvite[]> {
     .find({ projectId, expiresAt: { $gt: new Date() } })
     .sort({ createdAt: -1 })
     .toArray();
-  return docs.map((d) => ({
-    token: d._id,
-    projectId: d.projectId,
-    email: d.email,
-    invitedByName: d.invitedByName,
-    createdAt: d.createdAt,
-    expiresAt: d.expiresAt.getTime(),
-  }));
+  return docs.map(toInvite);
 }
 
-export async function revokeInvite(projectId: string, email: string): Promise<void> {
-  await (await invites()).deleteMany({ projectId, email: email.trim().toLowerCase() });
+export async function revokeInvite(projectId: string, toUserId: string): Promise<void> {
+  await (await invites()).deleteMany({ projectId, toUserId });
 }
 
 // --- Comments --------------------------------------------------------------

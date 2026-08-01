@@ -1,16 +1,14 @@
 // ---------------------------------------------------------------------------
 // Email abstraction (same swappable pattern as AI/search providers).
 //
-// Three backends, picked automatically:
-//   SMTP_HOST set       → SmtpMailer    (Gmail, Brevo, SendGrid, Mailgun, …)
-//   RESEND_API_KEY set  → ResendMailer
-//   neither             → ConsoleMailer (dev: logs the message, no delivery)
+// Two backends:
+//   SMTP_HOST set → SmtpMailer    (Gmail, Brevo, SendGrid, Mailgun, …)
+//   otherwise     → ConsoleMailer (logs the message, no delivery)
 //
-// SMTP exists because of a constraint that catches everyone: Resend with no
-// verified domain can only deliver to the address that owns the Resend account.
-// Providers offering *single sender* verification (Brevo, SendGrid) or plain
-// account credentials (Gmail) will mail anyone without owning a domain — and
-// they all speak SMTP, so one implementation covers the lot.
+// Resend was removed: it can only mail the account owner until you verify a
+// domain, which made it useless for inviting anyone. Collaboration no longer
+// touches email at all — invitations are delivered in-app by username — so the
+// mailer is now optional, used only for password resets when SMTP is set up.
 //
 // Feature code just calls getMailer().send().
 // ---------------------------------------------------------------------------
@@ -38,33 +36,6 @@ class ConsoleMailer implements Mailer {
     console.log(
       `\n📧 [ConsoleMailer] To: ${msg.to}\n   Subject: ${msg.subject}\n   ${msg.text}\n`,
     );
-  }
-}
-
-class ResendMailer implements Mailer {
-  readonly id = "resend";
-  readonly isConsole = false;
-  constructor(
-    private readonly apiKey: string,
-    private readonly from = process.env.EMAIL_FROM ?? "IdeaForge <onboarding@resend.dev>",
-  ) {}
-
-  async send(msg: EmailMessage): Promise<void> {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: this.from,
-        to: msg.to,
-        subject: msg.subject,
-        html: msg.html,
-        text: msg.text,
-      }),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new Error(`Resend send failed (${res.status}): ${detail}`);
-    }
   }
 }
 
@@ -129,12 +100,7 @@ let cached: Mailer | null = null;
 
 export function getMailer(): Mailer {
   if (cached) return cached;
-  // SMTP wins when configured: it's the escape hatch from Resend's
-  // no-verified-domain recipient restriction.
   const smtpHost = process.env.SMTP_HOST;
-  const resendKey = process.env.RESEND_API_KEY;
-  if (smtpHost) cached = new SmtpMailer(smtpHost);
-  else if (resendKey) cached = new ResendMailer(resendKey);
-  else cached = new ConsoleMailer();
+  cached = smtpHost ? new SmtpMailer(smtpHost) : new ConsoleMailer();
   return cached;
 }

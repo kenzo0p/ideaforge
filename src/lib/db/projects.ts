@@ -80,6 +80,8 @@ interface WorkspaceItemDoc {
 export interface ProjectMember {
   userId: string;
   email: string;
+  /** Handle they're shown and invited by. */
+  username: string;
   name: string | null;
   joinedAt: number;
 }

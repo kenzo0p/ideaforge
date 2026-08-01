@@ -15,6 +15,7 @@ const r = await import("../src/lib/db/reminders.ts");
 const t = await import("../src/lib/db/telegram.ts");
 const rl = await import("../src/lib/db/ratelimit.ts");
 const cb = await import("../src/lib/db/collaboration.ts");
+const un = await import("../src/lib/username.ts");
 
 let failed = 0;
 const eq = (label, actual, expected) => {
@@ -135,6 +136,35 @@ eq("blocks past the limit", (await rl.checkRateLimit(user.id, "smoke", 3, 60_000
 eq("usage reports 3 used", (await rl.getUsage(user.id, "smoke", 3, 60_000)).used, 3);
 eq("a different bucket is independent", (await rl.checkRateLimit(user.id, "other", 3, 60_000)).ok, true);
 
+console.log("\n\x1b[1musernames\x1b[0m");
+{
+  eq("rejects too short", !!un.validateUsername("ab"), true);
+  eq("rejects spaces", !!un.validateUsername("two words"), true);
+  eq("rejects leading digit", !!un.validateUsername("1cool"), true);
+  eq("rejects reserved", !!un.validateUsername("admin"), true);
+  eq("accepts a normal handle", un.validateUsername("ada_lovelace"), null);
+  eq("normalises case and @", un.normalizeUsername("  @AdaLovelace "), "adalovelace");
+
+  const u1 = await u.createUser(`h1-${Date.now()}@example.test`, "s:h", "Ada Lovelace");
+  ok("signup assigns a handle", !!u1.username);
+  eq("handle is valid", un.validateUsername(u1.username), null);
+  const u2 = await u.createUser(`h2-${Date.now()}@example.test`, "s:h", "Ada Lovelace");
+  ok("a clashing name gets a distinct handle", u1.username !== u2.username);
+
+  ok("lookup by handle works", (await u.getUserByUsername(u1.username))?.id === u1.id);
+  ok("lookup is case-insensitive", (await u.getUserByUsername(u1.username.toUpperCase()))?.id === u1.id);
+  eq("taken handles are refused", await u.updateUsername(u2.id, u1.username), false);
+  ok("a free handle is accepted", await u.updateUsername(u2.id, `free${Date.now().toString(36).slice(-5)}`));
+
+  const hits = await u.searchUsers(u1.username.slice(0, 3), u2.id, 5);
+  ok("search finds by prefix", hits.some((x) => x.id === u1.id));
+  eq("search never returns the searcher", (await u.searchUsers(u1.username.slice(0,3), u1.id, 5)).some(x => x.id === u1.id), false);
+  eq("regex characters are escaped, not executed", (await u.searchUsers(".*", u2.id, 5)).length, 0);
+
+  await u.deleteUser(u1.id);
+  await u.deleteUser(u2.id);
+}
+
 console.log("\n\x1b[1mcollaboration: access control\x1b[0m");
 {
   const owner = user;
@@ -146,7 +176,7 @@ console.log("\n\x1b[1mcollaboration: access control\x1b[0m");
   eq("not in their dashboard either",
      (await p.listProjects(mate.id)).some((x) => x.id === shared.id), false);
 
-  await p.addMember(shared.id, { userId: mate.id, email: mate.email, name: mate.name, joinedAt: Date.now() });
+  await p.addMember(shared.id, { userId: mate.id, email: mate.email, username: mate.username, name: mate.name, joinedAt: Date.now() });
   ok("member can read after invite", (await p.getProject(shared.id, mate.id))?.id === shared.id);
   ok("appears in their dashboard", (await p.listProjects(mate.id)).some((x) => x.id === shared.id));
   eq("marked as not-owner for them",
@@ -158,31 +188,38 @@ console.log("\n\x1b[1mcollaboration: access control\x1b[0m");
   eq("an uninvited stranger still cannot read", await p.getProject(shared.id, stranger.id), null);
 
   eq("adding the same member twice is a no-op", await (async () => {
-    await p.addMember(shared.id, { userId: mate.id, email: mate.email, name: null, joinedAt: Date.now() });
+    await p.addMember(shared.id, { userId: mate.id, email: mate.email, username: mate.username, name: null, joinedAt: Date.now() });
     return (await p.listMembers(shared.id, owner.id)).members.length;
   })(), 1);
   eq("the owner is never also a member", await (async () => {
-    await p.addMember(shared.id, { userId: owner.id, email: owner.email, name: null, joinedAt: Date.now() });
+    await p.addMember(shared.id, { userId: owner.id, email: owner.email, username: owner.username, name: null, joinedAt: Date.now() });
     return (await p.listMembers(shared.id, owner.id)).members.length;
   })(), 1);
 
   eq("only the owner is owner", await p.isProjectOwner(shared.id, mate.id), false);
   eq("owner is owner", await p.isProjectOwner(shared.id, owner.id), true);
 
-  console.log("\n\x1b[1mcollaboration: invitations\x1b[0m");
-  const inv = await cb.createInvite({ projectId: shared.id, email: "invitee@example.test", invitedByUserId: owner.id, invitedByName: "Owner" });
-  ok("invite token issued", inv.token.length >= 32);
-  eq("peek does not consume", (await cb.peekInvite(inv.token))?.email, "invitee@example.test");
-  eq("still listed as pending", (await cb.listInvites(shared.id)).length, 1);
-  eq("consume returns it once", (await cb.consumeInvite(inv.token))?.projectId, shared.id);
-  eq("…and not twice", await cb.consumeInvite(inv.token), null);
+  console.log("\n\x1b[1mcollaboration: in-app invitations\x1b[0m");
+  const mk = (to) => cb.createInvite({
+    projectId: shared.id, projectTitle: "Shared project",
+    toUserId: to.id, toUsername: to.username,
+    invitedByUserId: owner.id, invitedByName: "Owner", invitedByUsername: owner.username,
+  });
+  const inv = await mk(stranger);
+  eq("appears in the recipient's inbox", (await cb.listInvitesForUser(stranger.id)).length, 1);
+  eq("not in anyone else's", (await cb.listInvitesForUser(mate.id)).length, 0);
+  eq("listed as pending on the project", (await cb.listInvites(shared.id)).length, 1);
+  eq("a stranger cannot consume it", await cb.consumeInviteFor(inv.id, mate.id), null);
+  eq("the recipient can, once", (await cb.consumeInviteFor(inv.id, stranger.id))?.projectId, shared.id);
+  eq("…and not twice", await cb.consumeInviteFor(inv.id, stranger.id), null);
 
-  const inv2 = await cb.createInvite({ projectId: shared.id, email: "dup@example.test", invitedByUserId: owner.id, invitedByName: "Owner" });
-  const inv3 = await cb.createInvite({ projectId: shared.id, email: "dup@example.test", invitedByUserId: owner.id, invitedByName: "Owner" });
-  eq("re-inviting invalidates the old token", await cb.peekInvite(inv2.token), null);
-  ok("the newest token works", !!(await cb.peekInvite(inv3.token)));
-  await cb.revokeInvite(shared.id, "dup@example.test");
-  eq("revoke kills it", await cb.peekInvite(inv3.token), null);
+  const dup1 = await mk(stranger);
+  const dup2 = await mk(stranger);
+  eq("re-inviting replaces the old one", await cb.consumeInviteFor(dup1.id, stranger.id), null);
+  ok("the newest one works", !!(await cb.consumeInviteFor(dup2.id, stranger.id)));
+  const rev = await mk(stranger);
+  await cb.revokeInvite(shared.id, stranger.id);
+  eq("revoke kills it", await cb.consumeInviteFor(rev.id, stranger.id), null);
 
   console.log("\n\x1b[1mcollaboration: comments\x1b[0m");
   const c1 = await cb.addComment({ projectId: shared.id, userId: owner.id, authorName: "Owner", anchor: "plan", body: "Ship milestone 2 first" });
@@ -197,12 +234,12 @@ console.log("\n\x1b[1mcollaboration: access control\x1b[0m");
   ok("a member can remove themselves", await p.removeMember(shared.id, mate.id, mate.id));
   eq("and loses access", await p.getProject(shared.id, mate.id), null);
 
-  await p.addMember(shared.id, { userId: mate.id, email: mate.email, name: mate.name, joinedAt: Date.now() });
+  await p.addMember(shared.id, { userId: mate.id, email: mate.email, username: mate.username, name: mate.name, joinedAt: Date.now() });
   ok("the owner can remove a member", await p.removeMember(shared.id, owner.id, mate.id));
   eq("access revoked again", await p.getProject(shared.id, mate.id), null);
 
   console.log("\n\x1b[1mcollaboration: deleting an account\x1b[0m");
-  await p.addMember(shared.id, { userId: mate.id, email: mate.email, name: mate.name, joinedAt: Date.now() });
+  await p.addMember(shared.id, { userId: mate.id, email: mate.email, username: mate.username, name: mate.name, joinedAt: Date.now() });
   await u.deleteUser(mate.id);
   eq("membership on other people's projects is cleaned up",
      (await p.listMembers(shared.id, owner.id)).members.length, 0);

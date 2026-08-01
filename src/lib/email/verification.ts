@@ -61,7 +61,7 @@ export async function sendVerificationEmail(
     return { link, delivered: false, isConsole: true };
   }
 
-  // Real mailer: if delivery fails (e.g. Resend test-mode restricts recipients),
+  // Real mailer: if delivery fails (a rejected recipient, bad credentials),
   // don't crash signup — return delivered:false so a fallback link can be shown.
   try {
     await mailer.send(message);
@@ -72,37 +72,3 @@ export async function sendVerificationEmail(
   }
 }
 
-/** Invite someone onto a project. Returns the link so the UI can offer a copy button. */
-export async function sendProjectInviteEmail(
-  to: string,
-  token: string,
-  projectTitle: string,
-  invitedByName: string,
-): Promise<{ link: string; delivered: boolean; isConsole: boolean }> {
-  const link = `${await publicOrigin()}/invite/${token}`;
-  const mailer = getMailer();
-  const message = {
-    to,
-    subject: `${invitedByName} invited you to "${projectTitle}" on IdeaForge`,
-    text: `${invitedByName} invited you to collaborate on "${projectTitle}".\n\nAccept here:\n${link}\n\nThis invitation expires in 7 days.`,
-    html: `
-      <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto">
-        <h2>You've been invited to collaborate</h2>
-        <p><strong>${invitedByName}</strong> invited you to work on <strong>${projectTitle}</strong> in IdeaForge.</p>
-        <p><a href="${link}" style="display:inline-block;background:#0d6a6a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Open the project</a></p>
-        <p style="color:#666;font-size:13px">Or paste this link: ${link}<br/>It expires in 7 days.</p>
-      </div>`,
-  };
-
-  if (mailer.isConsole) {
-    await mailer.send(message);
-    return { link, delivered: false, isConsole: true };
-  }
-  try {
-    await mailer.send(message);
-    return { link, delivered: true, isConsole: false };
-  } catch (err) {
-    console.error("Project invite email failed to send:", err);
-    return { link, delivered: false, isConsole: false };
-  }
-}
