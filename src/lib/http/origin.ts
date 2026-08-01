@@ -23,3 +23,22 @@ export async function publicOrigin(): Promise<string> {
 export async function publicUrl(path: string): Promise<string> {
   return new URL(path, `${await publicOrigin()}/`).toString();
 }
+
+/**
+ * Sanitise a `?next=` destination.
+ *
+ * Only same-site absolute paths survive; everything else becomes the fallback.
+ * The cases that matter are `//evil.com` and `/\evil.com` — browsers read both
+ * as protocol-relative and leave the site, which turns a "sign in to continue"
+ * link into an open redirect.
+ *
+ * Deliberately shared: this rule was duplicated in two places and the copies
+ * disagreed, which is exactly how one of them ends up exploitable.
+ */
+export function safeInternalPath(value: unknown, fallback = "/dashboard"): string {
+  const next = typeof value === "string" ? value.trim() : "";
+  if (!next.startsWith("/")) return fallback;
+  // Reject any second character that a browser could read as an authority.
+  if (/^\/[/\\]/.test(next)) return fallback;
+  return next;
+}

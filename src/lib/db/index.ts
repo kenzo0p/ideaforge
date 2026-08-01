@@ -173,6 +173,15 @@ async function ensureIndexes(db: Db): Promise<void> {
     db.collection("reminderLogs").createIndex({ userId: 1, createdAt: -1 }),
 
     db.collection("projects").createIndex({ userId: 1, updatedAt: -1 }),
+    // Serves the "shared with me" half of the access filter.
+    db.collection("projects").createIndex({ "members.userId": 1 }),
+
+    db.collection("projectInvites").createIndex({ projectId: 1 }),
+    db.collection("projectInvites").createIndex({ email: 1 }),
+    db.collection("projectInvites").createIndex({ expiresAt: 1 }, ttl),
+
+    db.collection("projectComments").createIndex({ projectId: 1, createdAt: 1 }),
+    db.collection("projectComments").createIndex({ userId: 1 }),
     // Sparse: only shared projects carry a token, and null must not collide.
     db.collection("projects").createIndex(
       { shareToken: 1 },

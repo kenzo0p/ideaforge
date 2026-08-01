@@ -14,6 +14,7 @@ const p = await import("../src/lib/db/projects.ts");
 const r = await import("../src/lib/db/reminders.ts");
 const t = await import("../src/lib/db/telegram.ts");
 const rl = await import("../src/lib/db/ratelimit.ts");
+const cb = await import("../src/lib/db/collaboration.ts");
 
 let failed = 0;
 const eq = (label, actual, expected) => {
@@ -133,6 +134,83 @@ for (let i = 0; i < 3; i++) await rl.checkRateLimit(user.id, "smoke", 3, 60_000)
 eq("blocks past the limit", (await rl.checkRateLimit(user.id, "smoke", 3, 60_000)).ok, false);
 eq("usage reports 3 used", (await rl.getUsage(user.id, "smoke", 3, 60_000)).used, 3);
 eq("a different bucket is independent", (await rl.checkRateLimit(user.id, "other", 3, 60_000)).ok, true);
+
+console.log("\n\x1b[1mcollaboration: access control\x1b[0m");
+{
+  const owner = user;
+  const mate = await u.createUser(`mate-${Date.now()}@example.test`, "salt:hash", "Team Mate");
+  const stranger = await u.createUser(`stranger-${Date.now()}@example.test`, "salt:hash", "Nobody");
+  const shared = await p.createProject({ userId: owner.id, title: "Shared project", idea: "collab" });
+
+  eq("stranger cannot read before invite", await p.getProject(shared.id, mate.id), null);
+  eq("not in their dashboard either",
+     (await p.listProjects(mate.id)).some((x) => x.id === shared.id), false);
+
+  await p.addMember(shared.id, { userId: mate.id, email: mate.email, name: mate.name, joinedAt: Date.now() });
+  ok("member can read after invite", (await p.getProject(shared.id, mate.id))?.id === shared.id);
+  ok("appears in their dashboard", (await p.listProjects(mate.id)).some((x) => x.id === shared.id));
+  eq("marked as not-owner for them",
+     (await p.listProjects(mate.id)).find((x) => x.id === shared.id)?.isOwner, false);
+  eq("marked as owner for the owner",
+     (await p.listProjects(owner.id)).find((x) => x.id === shared.id)?.isOwner, true);
+  eq("owner sees the member count",
+     (await p.listProjects(owner.id)).find((x) => x.id === shared.id)?.memberCount, 1);
+  eq("an uninvited stranger still cannot read", await p.getProject(shared.id, stranger.id), null);
+
+  eq("adding the same member twice is a no-op", await (async () => {
+    await p.addMember(shared.id, { userId: mate.id, email: mate.email, name: null, joinedAt: Date.now() });
+    return (await p.listMembers(shared.id, owner.id)).members.length;
+  })(), 1);
+  eq("the owner is never also a member", await (async () => {
+    await p.addMember(shared.id, { userId: owner.id, email: owner.email, name: null, joinedAt: Date.now() });
+    return (await p.listMembers(shared.id, owner.id)).members.length;
+  })(), 1);
+
+  eq("only the owner is owner", await p.isProjectOwner(shared.id, mate.id), false);
+  eq("owner is owner", await p.isProjectOwner(shared.id, owner.id), true);
+
+  console.log("\n\x1b[1mcollaboration: invitations\x1b[0m");
+  const inv = await cb.createInvite({ projectId: shared.id, email: "invitee@example.test", invitedByUserId: owner.id, invitedByName: "Owner" });
+  ok("invite token issued", inv.token.length >= 32);
+  eq("peek does not consume", (await cb.peekInvite(inv.token))?.email, "invitee@example.test");
+  eq("still listed as pending", (await cb.listInvites(shared.id)).length, 1);
+  eq("consume returns it once", (await cb.consumeInvite(inv.token))?.projectId, shared.id);
+  eq("…and not twice", await cb.consumeInvite(inv.token), null);
+
+  const inv2 = await cb.createInvite({ projectId: shared.id, email: "dup@example.test", invitedByUserId: owner.id, invitedByName: "Owner" });
+  const inv3 = await cb.createInvite({ projectId: shared.id, email: "dup@example.test", invitedByUserId: owner.id, invitedByName: "Owner" });
+  eq("re-inviting invalidates the old token", await cb.peekInvite(inv2.token), null);
+  ok("the newest token works", !!(await cb.peekInvite(inv3.token)));
+  await cb.revokeInvite(shared.id, "dup@example.test");
+  eq("revoke kills it", await cb.peekInvite(inv3.token), null);
+
+  console.log("\n\x1b[1mcollaboration: comments\x1b[0m");
+  const c1 = await cb.addComment({ projectId: shared.id, userId: owner.id, authorName: "Owner", anchor: "plan", body: "Ship milestone 2 first" });
+  await cb.addComment({ projectId: shared.id, userId: mate.id, authorName: "Mate", anchor: "general", body: "Agreed" });
+  eq("both comments listed", (await cb.listComments(shared.id)).length, 2);
+  eq("oldest first", (await cb.listComments(shared.id))[0].body, "Ship milestone 2 first");
+  eq("a non-author cannot delete", await cb.deleteComment(c1.id, mate.id), false);
+  eq("the author can", await cb.deleteComment(c1.id, owner.id), true);
+
+  console.log("\n\x1b[1mcollaboration: leaving and removal\x1b[0m");
+  eq("a stranger cannot remove anyone", await p.removeMember(shared.id, stranger.id, mate.id), false);
+  ok("a member can remove themselves", await p.removeMember(shared.id, mate.id, mate.id));
+  eq("and loses access", await p.getProject(shared.id, mate.id), null);
+
+  await p.addMember(shared.id, { userId: mate.id, email: mate.email, name: mate.name, joinedAt: Date.now() });
+  ok("the owner can remove a member", await p.removeMember(shared.id, owner.id, mate.id));
+  eq("access revoked again", await p.getProject(shared.id, mate.id), null);
+
+  console.log("\n\x1b[1mcollaboration: deleting an account\x1b[0m");
+  await p.addMember(shared.id, { userId: mate.id, email: mate.email, name: mate.name, joinedAt: Date.now() });
+  await u.deleteUser(mate.id);
+  eq("membership on other people's projects is cleaned up",
+     (await p.listMembers(shared.id, owner.id)).members.length, 0);
+
+  await p.deleteProject(shared.id, owner.id);
+  eq("deleting a project removes its comments", (await cb.listComments(shared.id)).length, 0);
+  await u.deleteUser(stranger.id);
+}
 
 console.log("\n\x1b[1mgoogle sign-in linking\x1b[0m");
 {

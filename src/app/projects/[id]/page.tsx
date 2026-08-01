@@ -11,6 +11,9 @@ import AgentConsole from "@/components/AgentConsole";
 import ConnectTelegram from "@/components/ConnectTelegram";
 import ProjectReminders from "@/components/ProjectReminders";
 import ShareProject from "@/components/ShareProject";
+import Collaborators from "@/components/Collaborators";
+import CommentThread from "@/components/CommentThread";
+import { collaborationStateAction } from "@/lib/collab-actions";
 import { getMilestoneProgress, getProject, listWorkspaceItems } from "@/lib/db/projects";
 import { listRemindersForProject, listReminderLogs } from "@/lib/db/reminders";
 import { isTelegramLinked } from "@/lib/db/telegram";
@@ -46,6 +49,7 @@ export default async function ProjectPage({
   const reminders = await listRemindersForProject(id, user.id);
   const reminderHistory = await listReminderLogs(id, user.id);
   const completedMilestones = await getMilestoneProgress(id);
+  const collab = await collaborationStateAction(id);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-8">
@@ -112,7 +116,24 @@ export default async function ProjectPage({
 
         {activeTab === "collaborate" && (
           <>
-            <ShareProject projectId={project.id} initialToken={project.shareToken} />
+            {collab && (
+              <Collaborators
+                projectId={project.id}
+                isOwner={collab.isOwner}
+                ownerLabel={collab.isOwner ? (user.name ?? user.email) : "Project owner"}
+                members={collab.members}
+                invites={collab.invites}
+                meId={collab.me}
+              />
+            )}
+            {collab && (
+              <CommentThread projectId={project.id} comments={collab.comments} meId={collab.me} />
+            )}
+            {/* Sharing is the owner's call — a collaborator shouldn't be able to
+                publish someone else's project to the open web. */}
+            {collab?.isOwner && (
+              <ShareProject projectId={project.id} initialToken={project.shareToken} />
+            )}
             <AgentConsole projectId={project.id} />
             {telegramConfigured && <ConnectTelegram linked={telegramLinked} />}
             {telegramConfigured && (

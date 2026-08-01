@@ -51,6 +51,10 @@ export interface ProjectSummary {
   /** Total milestones in the saved plan (0 when there's no plan yet). */
   totalMilestones: number;
   shared: boolean;
+  /** False when this project was shared with you by someone else. */
+  isOwner: boolean;
+  /** Number of collaborators, excluding the owner. */
+  memberCount: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -72,9 +76,20 @@ interface WorkspaceItemDoc {
   createdAt: number;
 }
 
+/** Someone invited onto the project. The owner is `ProjectDoc.userId`, not a member. */
+export interface ProjectMember {
+  userId: string;
+  email: string;
+  name: string | null;
+  joinedAt: number;
+}
+
 interface ProjectDoc {
   _id: string;
+  /** The owner. Only the owner can rename, delete, share, or manage members. */
   userId: string;
+  /** Collaborators. Absent on projects created before collaboration existed. */
+  members?: ProjectMember[];
   title: string;
   idea: string;
   locale: string | null;
@@ -89,6 +104,18 @@ interface ProjectDoc {
 }
 
 const projects = () => col<ProjectDoc>("projects");
+
+/**
+ * The single access rule: you can reach a project if you own it or you were
+ * invited onto it.
+ *
+ * Every read goes through this filter rather than matching `userId` directly.
+ * Spreading the rule across call sites is how a collaborator ends up locked out
+ * of one screen, or — far worse — how a stranger keeps access to another.
+ */
+function accessFilter(userId: string) {
+  return { $or: [{ userId }, { "members.userId": userId }] };
+}
 
 function toProject(d: ProjectDoc): Project {
   return {
@@ -158,10 +185,60 @@ export async function updateProjectArtifacts(
   );
 }
 
-/** Fetch a project only if it belongs to `userId` (authorization boundary). */
+/** Fetch a project if `userId` owns it or was invited onto it. */
 export async function getProject(id: string, userId: string): Promise<Project | null> {
-  const d = await (await projects()).findOne({ _id: id, userId });
+  const d = await (await projects()).findOne({ _id: id, ...accessFilter(userId) });
   return d ? toProject(d) : null;
+}
+
+/** True only for the owner. Guards renaming, deleting, sharing, and invites. */
+export async function isProjectOwner(id: string, userId: string): Promise<boolean> {
+  return (await (await projects()).countDocuments({ _id: id, userId }, { limit: 1 })) > 0;
+}
+
+/** Everyone who can see the project: the owner first, then collaborators. */
+export async function listMembers(
+  id: string,
+  userId: string,
+): Promise<{ ownerId: string; members: ProjectMember[] } | null> {
+  const d = await (await projects()).findOne(
+    { _id: id, ...accessFilter(userId) },
+    { projection: { userId: 1, members: 1 } },
+  );
+  if (!d) return null;
+  return { ownerId: d.userId, members: d.members ?? [] };
+}
+
+/** Add a collaborator. Idempotent — re-accepting an invite is not an error. */
+export async function addMember(id: string, member: ProjectMember): Promise<void> {
+  const c = await projects();
+  // Never let the owner also appear as a member; it would show them twice and
+  // let "leave project" strand a project with no owner.
+  const already = await c.countDocuments(
+    { _id: id, $or: [{ userId: member.userId }, { "members.userId": member.userId }] },
+    { limit: 1 },
+  );
+  if (already) return;
+  await c.updateOne({ _id: id }, { $push: { members: member }, $set: { updatedAt: Date.now() } });
+}
+
+/**
+ * Remove a collaborator. The owner can remove anyone; a collaborator may only
+ * remove themselves (leaving), which is why `actorId` is checked here rather
+ * than trusted from the caller.
+ */
+export async function removeMember(
+  id: string,
+  actorId: string,
+  targetUserId: string,
+): Promise<boolean> {
+  const owner = await isProjectOwner(id, actorId);
+  if (!owner && actorId !== targetUserId) return false;
+  const res = await (await projects()).updateOne(
+    { _id: id, ...accessFilter(actorId) },
+    { $pull: { members: { userId: targetUserId } } },
+  );
+  return res.modifiedCount > 0;
 }
 
 /**
@@ -179,10 +256,12 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
       hasPlan: boolean;
       totalMilestones: number;
       shared: boolean;
+      isOwner: boolean;
+      memberCount: number;
       createdAt: number;
       updatedAt: number;
     }>([
-      { $match: { userId } },
+      { $match: accessFilter(userId) },
       { $sort: { updatedAt: -1 } },
       {
         $project: {
@@ -195,6 +274,8 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
           hasPlan: { $ne: [{ $ifNull: ["$plan", null] }, null] },
           totalMilestones: { $size: { $ifNull: ["$plan.milestones", []] } },
           shared: { $ne: [{ $ifNull: ["$shareToken", null] }, null] },
+          isOwner: { $eq: ["$userId", userId] },
+          memberCount: { $size: { $ifNull: ["$members", []] } },
         },
       },
     ])
@@ -209,6 +290,8 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
     hasPlan: r.hasPlan,
     totalMilestones: r.totalMilestones,
     shared: r.shared,
+    isOwner: r.isOwner,
+    memberCount: r.memberCount,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   }));
@@ -232,6 +315,8 @@ export async function deleteProject(id: string, userId: string): Promise<void> {
   await Promise.all([
     (await col("reminders")).deleteMany({ projectId: id, userId }),
     (await col("reminderLogs")).deleteMany({ projectId: id, userId }),
+    (await col("projectInvites")).deleteMany({ projectId: id }),
+    (await col("projectComments")).deleteMany({ projectId: id }),
   ]);
 }
 
@@ -296,7 +381,7 @@ export async function setMilestoneDone(
 export async function milestoneCounts(userId: string): Promise<Record<string, number>> {
   const rows = await (await projects())
     .aggregate<{ _id: string; c: number }>([
-      { $match: { userId } },
+      { $match: accessFilter(userId) },
       {
         $project: {
           c: {
@@ -357,7 +442,7 @@ export async function listWorkspaceItems(projectId: string): Promise<WorkspaceIt
 /** Delete a workspace item only if its project belongs to `userId`. */
 export async function deleteWorkspaceItem(id: string, userId: string): Promise<void> {
   await (await projects()).updateOne(
-    { userId, "workspaceItems.id": id },
+    { ...accessFilter(userId), "workspaceItems.id": id },
     { $pull: { workspaceItems: { id } } },
   );
 }

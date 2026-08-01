@@ -27,7 +27,14 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
-export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
+export default function AuthForm({
+  mode,
+  next,
+}: {
+  mode: "sign-in" | "sign-up";
+  /** Where to land after signing in — used by invite links. Validated server-side. */
+  next?: string;
+}) {
   const isSignUp = mode === "sign-up";
   const action = isSignUp ? signUpAction : signInAction;
   const [state, formAction] = useActionState<AuthState, FormData>(action, {});
@@ -54,6 +61,7 @@ export default function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       )}
 
       <form action={formAction} className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+        {next && <input type="hidden" name="next" value={next} />}
         {isSignUp && (
           <Field label="Name (optional)">
             <input name="name" autoComplete="name" className={inputCls} placeholder="Ada Lovelace" />

@@ -122,10 +122,23 @@ export async function deleteUser(userId: string): Promise<void> {
     "telegramLinks",
     "telegramLinkCodes",
     "rateHits",
+    "projectComments",
   ];
   await Promise.all(
     owned.map(async (name) => (await col(name)).deleteMany({ userId })),
   );
+  // Collaboration leaves traces on *other people's* projects: membership on
+  // theirs, and invitations addressed to this email. Neither is keyed by userId,
+  // so neither is covered by the loop above.
+  const user = await (await users()).findOne({ _id: userId }, { projection: { email: 1 } });
+  await (await col<{ members?: { userId: string }[] }>("projects")).updateMany(
+    { "members.userId": userId },
+    { $pull: { members: { userId } } },
+  );
+  if (user?.email) {
+    await (await col("projectInvites")).deleteMany({ email: user.email });
+  }
+
   await (await users()).deleteOne({ _id: userId });
 }
 

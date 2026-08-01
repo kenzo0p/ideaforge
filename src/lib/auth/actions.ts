@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { safeInternalPath } from "@/lib/http/origin";
 import {
   createUser,
   createVerificationToken,
@@ -79,8 +80,9 @@ export async function signInAction(_prev: AuthState, formData: FormData): Promis
   }
 
   await startSession(user.id);
-  redirect("/dashboard");
+  redirect(safeInternalPath(formData.get("next")));
 }
+
 
 /** Resend the verification email for an unverified account. */
 export async function resendVerificationAction(email: string): Promise<AuthState> {
