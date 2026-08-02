@@ -7,10 +7,16 @@ export class TavilyProvider implements SearchProvider {
   readonly label = "Tavily";
   readonly isMock = false;
 
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
+
   constructor(
-    private readonly apiKey: string,
-    private readonly baseUrl = process.env.TAVILY_BASE_URL ?? "https://api.tavily.com",
-  ) {}
+    apiKey: string,
+    baseUrl = process.env.TAVILY_BASE_URL ?? "https://api.tavily.com",
+  ) {
+    this.apiKey = apiKey;
+    this.baseUrl = baseUrl;
+  }
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
     const res = await fetch(`${this.baseUrl.replace(/\/$/, "")}/search`, {

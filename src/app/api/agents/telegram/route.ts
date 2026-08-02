@@ -1,5 +1,9 @@
-import { handleAgentMessage } from "@/lib/agents/handler";
-import { sendTelegramMessage, type TelegramUpdate } from "@/lib/agents/telegram";
+import { handleAgentMessage, type AgentInput } from "@/lib/agents/handler";
+import {
+  answerCallbackQuery,
+  sendTelegramMessage,
+  type TelegramUpdate,
+} from "@/lib/agents/telegram";
 import {
   getActiveProjectId,
   getUserByChatId,
@@ -26,6 +30,22 @@ export async function POST(req: Request) {
     update = await req.json();
   } catch {
     return new Response("Bad Request", { status: 400 });
+  }
+
+  // A tapped button arrives as a callback_query; treat its data as typed input
+  // so buttons and commands can't drift apart.
+  const cq = update.callback_query;
+  if (cq) {
+    await answerCallbackQuery(cq.id);
+    const cqChat = cq.message?.chat?.id;
+    if (cqChat !== undefined && cq.data) {
+      try {
+        await route(cqChat, cq.data);
+      } catch (err) {
+        console.error("Telegram webhook callback error:", err);
+      }
+    }
+    return Response.json({ ok: true });
   }
 
   const message = update.message;
@@ -57,20 +77,26 @@ export async function POST(req: Request) {
       return Response.json({ ok: true });
     }
 
-    const user = await getUserByChatId(chatId);
-    const reply = await handleAgentMessage({
-      text,
-      userId: user?.id ?? null,
-      // The chat remembers which project it's talking about between messages.
-      projectId: user ? await getActiveProjectId(chatId) : null,
-      channel: "telegram",
-      onSelectProject: (projectId) => void setActiveProject(chatId, projectId),
-    });
-    await sendTelegramMessage(chatId, reply);
+    await route(chatId, text);
   } catch (err) {
     console.error("Telegram webhook error:", err);
     await sendTelegramMessage(chatId, "⚠️ Something went wrong. Try again.").catch(() => {});
   }
 
   return Response.json({ ok: true });
+}
+
+/** One instruction → one reply, shared by typed messages and button taps. */
+async function route(chatId: number, text: string): Promise<void> {
+  const user = await getUserByChatId(chatId);
+  const input: AgentInput = {
+    text,
+    userId: user?.id ?? null,
+    // The chat remembers which project it's talking about between messages.
+    projectId: user ? await getActiveProjectId(chatId) : null,
+    channel: "telegram",
+    onSelectProject: (projectId) => void setActiveProject(chatId, projectId),
+  };
+  const reply = await handleAgentMessage(input);
+  await sendTelegramMessage(chatId, reply, input.buttons);
 }

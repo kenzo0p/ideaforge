@@ -7,11 +7,19 @@ export class OpenAIProvider implements AIProvider {
   readonly label = "OpenAI";
   readonly isMock = false;
 
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly baseUrl: string;
+
   constructor(
-    private readonly apiKey: string,
-    private readonly model = process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-    private readonly baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-  ) {}
+    apiKey: string,
+    model = process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+    baseUrl = process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
+  ) {
+    this.apiKey = apiKey;
+    this.model = model;
+    this.baseUrl = baseUrl;
+  }
 
   async *streamText(options: GenerateOptions): AsyncIterable<string> {
     const res = await fetch(`${this.baseUrl}/chat/completions`, {

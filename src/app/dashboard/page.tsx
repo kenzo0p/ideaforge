@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { Compass, LayoutDashboard, Plus, Rocket, Sparkles } from "lucide-react";
 import ConnectTelegram from "@/components/ConnectTelegram";
 import ProjectFilters from "@/components/ProjectFilters";
+import GettingStarted from "@/components/GettingStarted";
+import { dismissOnboardingAction, isOnboardingDismissed } from "@/lib/onboarding-actions";
 import { listProjects, milestoneCounts } from "@/lib/db/projects";
 import { isTelegramLinked } from "@/lib/db/telegram";
 import { isTelegramConfigured } from "@/lib/agents/telegram";
@@ -18,8 +20,22 @@ export default async function DashboardPage() {
   const telegramConfigured = isTelegramConfigured();
   const telegramLinked = telegramConfigured && await isTelegramLinked(user.id);
 
+  // Progress is derived from real work, not from a tutorial flag — the list
+  // ticks itself off as the account actually uses the product.
+  const dismissedOnboarding = await isOnboardingDismissed();
+  const progress = {
+    validated: projects.some((p) => p.hasValidation),
+    researched: projects.some((p) => p.hasResearch),
+    planned: projects.some((p) => p.hasPlan),
+    collaborated: projects.some((p) => p.memberCount > 0 || !p.isOwner),
+  };
+
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-10">
+      {!dismissedOnboarding && (
+        <GettingStarted progress={progress} onDismiss={dismissOnboardingAction} />
+      )}
+
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold">

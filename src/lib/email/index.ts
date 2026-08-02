@@ -48,14 +48,26 @@ class SmtpMailer implements Mailer {
   readonly isConsole = false;
   private transport: Transporter | null = null;
 
+  private readonly host: string;
+  private readonly port: number;
+  private readonly user?: string;
+  private readonly pass?: string;
+  private readonly from: string;
+
   constructor(
-    private readonly host: string,
-    private readonly port = Number(process.env.SMTP_PORT ?? 587),
-    private readonly user = process.env.SMTP_USER,
-    private readonly pass = process.env.SMTP_PASSWORD,
-    private readonly from = process.env.EMAIL_FROM ??
+    host: string,
+    port = Number(process.env.SMTP_PORT ?? 587),
+    user = process.env.SMTP_USER,
+    pass = process.env.SMTP_PASSWORD,
+    from = process.env.EMAIL_FROM ??
       `IdeaForge <${process.env.SMTP_USER ?? "no-reply@localhost"}>`,
-  ) {}
+  ) {
+    this.host = host;
+    this.port = port;
+    this.user = user;
+    this.pass = pass;
+    this.from = from;
+  }
 
   private async getTransport(): Promise<Transporter> {
     if (this.transport) return this.transport;

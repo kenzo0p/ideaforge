@@ -1,11 +1,17 @@
 import { getProject } from "@/lib/db/projects";
 import { getCurrentUser } from "@/lib/auth/session";
 import { buildMarkdownBrief } from "@/lib/export/brief";
+import { slugify } from "@/lib/format";
 
 export const runtime = "nodejs";
 
-// GET /projects/[id]/export — download the project's full brief as Markdown.
-// Owner-scoped: a non-owner gets 404.
+// GET /projects/[id]/export — the project's full brief as Markdown.
+//
+//   ?inline=1  serve as text/plain so the client can read it and copy it to the
+//              clipboard, which is how it gets pasted straight into Notion.
+//              Without it, the file downloads.
+//
+// Scoped by getProject, so collaborators can export too.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await getCurrentUser();
@@ -23,12 +29,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     plan: project.plan,
   });
 
-  const slug = project.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50) || "brief";
+  const inline = new URL(_req.url).searchParams.get("inline") === "1";
 
   return new Response(md, {
     headers: {
-      "Content-Type": "text/markdown; charset=utf-8",
-      "Content-Disposition": `attachment; filename="ideaforge-${slug}.md"`,
+      "Content-Type": inline ? "text/plain; charset=utf-8" : "text/markdown; charset=utf-8",
+      ...(inline
+        ? {}
+        : {
+            "Content-Disposition": `attachment; filename="ideaforge-${slugify(project.title)}.md"`,
+          }),
       "Cache-Control": "no-store",
     },
   });

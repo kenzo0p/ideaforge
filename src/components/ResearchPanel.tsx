@@ -1,10 +1,9 @@
 "use client";
 
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { ExternalLink, Lightbulb, Search, Swords } from "lucide-react";
 import type { ProjectPlan, ResearchReport, ResearchResources } from "@/lib/insights/types";
 import ResourceAside from "@/components/ResourceAside";
+import CitedMarkdown from "@/components/CitedMarkdown";
 
 /**
  * Resources moved from the build plan onto the research report. Projects saved
@@ -75,9 +74,13 @@ export default function ResearchPanel({
       </div>
 
       {/* Summary */}
-      <div className="prose-insights max-w-[68ch] text-[15px]">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.summaryMarkdown}</ReactMarkdown>
-      </div>
+      {/* Every [n] in the briefing is a control that reveals its source. */}
+      <CitedMarkdown
+        citations={report.citations ?? []}
+        className="prose-insights max-w-[68ch] text-[15px]"
+      >
+        {report.summaryMarkdown}
+      </CitedMarkdown>
 
       {/* Existing solutions */}
       {(report.existingSolutions?.length ?? 0) > 0 && (

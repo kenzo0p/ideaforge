@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -81,6 +81,13 @@ export default function IdeaConsole({
   // Persistence (Part 4)
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [autosavedAt, setAutosavedAt] = useState<number | null>(null);
+  // Mirrors of the state autosave reads, so a save triggered from a callback
+  // never captures a stale closure.
+  const savedIdRef = useRef<string | null>(null);
+  const outputRef = useRef("");
+  const reportRef = useRef<ResearchReport | null>(null);
+  const planRef = useRef<ProjectPlan | null>(null);
   const router = useRouter();
 
   async function analyze(text: string) {
@@ -99,6 +106,8 @@ export default function IdeaConsole({
     setPlan(null);
     setPlanError(null);
     setSavedId(null);
+    savedIdRef.current = null;
+    setAutosavedAt(null);
     setTab("validation"); // a new idea starts back at step one
     const controller = new AbortController();
     abortRef.current = controller;
@@ -211,30 +220,72 @@ export default function IdeaConsole({
     }
   }
 
+  /**
+   * Persist whatever exists so far.
+   *
+   * `silent` is the autosave path: it must never steal focus, show a spinner,
+   * or surface an error, because the user didn't ask for it. Manual saves still
+   * show state so the button feels responsive.
+   */
+  const persist = useCallback(
+    async (silent = false) => {
+      if (!analyzedIdea || !isAuthed) return null;
+      if (!silent) setSaving(true);
+      try {
+        const { id } = await saveProjectAction({
+          id: savedIdRef.current ?? undefined, // update in place if already saved
+          title: analyzedIdea.slice(0, 70),
+          idea: analyzedIdea,
+          validationMarkdown: outputRef.current || null,
+          research: reportRef.current ?? null,
+          plan: planRef.current ?? null,
+        });
+        // Ref as well as state: the next autosave may fire before React
+        // re-renders, and a second create would duplicate the project.
+        savedIdRef.current = id;
+        setSavedId(id);
+        setAutosavedAt(Date.now());
+        return id;
+      } catch {
+        return null; // Non-fatal — the next autosave or a manual save retries.
+      } finally {
+        if (!silent) setSaving(false);
+      }
+    },
+    [analyzedIdea, isAuthed],
+  );
+
   async function saveProject() {
-    if (!analyzedIdea || saving) return;
+    if (saving) return;
     // Saving requires an account — send guests to sign in.
     if (!isAuthed) {
       router.push("/sign-in");
       return;
     }
-    setSaving(true);
-    try {
-      const { id } = await saveProjectAction({
-        id: savedId ?? undefined, // update in place if already saved
-        title: analyzedIdea.slice(0, 70),
-        idea: analyzedIdea,
-        validationMarkdown: output || null,
-        research: report ?? null,
-        plan: plan ?? null,
-      });
-      setSavedId(id);
-    } catch {
-      // Non-fatal — user can retry.
-    } finally {
-      setSaving(false);
-    }
+    await persist(false);
   }
+
+  // Mirror state into refs so the autosave closure always reads the latest
+  // values. Done in an effect: mutating a ref during render is a footgun.
+  useEffect(() => {
+    outputRef.current = output;
+    reportRef.current = report;
+    planRef.current = plan;
+  }, [output, report, plan]);
+
+  /**
+   * Autosave when a stage finishes.
+   *
+   * Each stage is an expensive model call, so losing it to a closed tab means
+   * the user paid for nothing. Saving on completion (not on every token) keeps
+   * writes to one per stage.
+   */
+  useEffect(() => {
+    if (!isAuthed || !analyzedIdea) return;
+    if (status !== "done") return;
+    const t = setTimeout(() => void persist(true), 400);
+    return () => clearTimeout(t);
+  }, [isAuthed, analyzedIdea, status, research, planStatus, persist]);
 
   const streaming = status === "streaming";
 
@@ -458,7 +509,14 @@ export default function IdeaConsole({
       {mode === "idea" && status === "done" && (
         <div className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full border border-border bg-card/95 p-1.5 pl-3 shadow-lg backdrop-blur">
           <span className="hidden text-xs text-muted sm:inline">
-            {savedId ? "Saved to dashboard" : "Don't lose this"}
+            {/* Autosave is silent, so say so — otherwise people keep pressing Save. */}
+            {autosavedAt
+              ? "Saved automatically"
+              : savedId
+                ? "Saved to dashboard"
+                : isAuthed
+                  ? "Saving as you go"
+                  : "Sign in to keep this"}
           </span>
           {savedId && (
             <button

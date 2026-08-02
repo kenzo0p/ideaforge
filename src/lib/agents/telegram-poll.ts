@@ -4,8 +4,9 @@ import {
   linkTelegramChat,
   setActiveProject,
 } from "@/lib/db/telegram";
-import { handleAgentMessage } from "./handler";
+import { handleAgentMessage, type AgentInput } from "./handler";
 import {
+  answerCallbackQuery,
   deleteTelegramWebhook,
   getTelegramUpdates,
   sendTelegramMessage,
@@ -65,6 +66,18 @@ async function loop(): Promise<void> {
 }
 
 async function handleUpdate(update: TelegramUpdate): Promise<void> {
+  // A button tap arrives as a callback_query, not a message. Its `data` is
+  // treated as if the user had typed it, so one code path serves both.
+  const cq = update.callback_query;
+  if (cq) {
+    const cqChat = cq.message?.chat?.id;
+    // Always acknowledge, or the button spins forever in the client.
+    await answerCallbackQuery(cq.id);
+    if (cqChat === undefined || !cq.data) return;
+    await route(cqChat, cq.data);
+    return;
+  }
+
   const msg = update.message;
   const text = msg?.text?.trim();
   const chatId = msg?.chat?.id;
@@ -92,17 +105,28 @@ async function handleUpdate(update: TelegramUpdate): Promise<void> {
     return;
   }
 
-  // Everything else: scope to the linked user (may be null → handler prompts to link).
+  await route(chatId, text);
+}
+
+/**
+ * Run one instruction and reply, whether it was typed or tapped.
+ *
+ * Shared by messages and callback queries so a button and the equivalent
+ * command can never drift apart.
+ */
+async function route(chatId: number, text: string): Promise<void> {
   const user = await getUserByChatId(chatId);
-  const reply = await handleAgentMessage({
+  const input: AgentInput = {
     text,
     userId: user?.id ?? null,
     // The chat remembers which project it's talking about between messages.
     projectId: user ? await getActiveProjectId(chatId) : null,
-    channel: "telegram",
-    onSelectProject: (projectId) => void setActiveProject(chatId, projectId),
-  });
-  await sendTelegramMessage(chatId, reply);
+    channel: "telegram" as const,
+    onSelectProject: (projectId: string) => void setActiveProject(chatId, projectId),
+  };
+  const reply = await handleAgentMessage(input);
+  // The handler attaches buttons to `input` when the reply has choices.
+  await sendTelegramMessage(chatId, reply, input.buttons);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

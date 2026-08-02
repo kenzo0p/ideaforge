@@ -7,11 +7,19 @@ export class AnthropicProvider implements AIProvider {
   readonly label = "Anthropic";
   readonly isMock = false;
 
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly baseUrl: string;
+
   constructor(
-    private readonly apiKey: string,
-    private readonly model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5",
-    private readonly baseUrl = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com",
-  ) {}
+    apiKey: string,
+    model = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5",
+    baseUrl = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com",
+  ) {
+    this.apiKey = apiKey;
+    this.model = model;
+    this.baseUrl = baseUrl;
+  }
 
   async *streamText(options: GenerateOptions): AsyncIterable<string> {
     // Anthropic takes `system` separately from the message list.

@@ -22,15 +22,32 @@ export interface AgentInput {
   locale?: string;
   /** Chat channels call this to remember the project the user picked. */
   onSelectProject?: (projectId: string) => void;
+  /**
+   * Buttons the handler wants attached to its reply. Set by the handler, read
+   * by the transport — an out-parameter so the return type stays a plain string
+   * for the in-app console, which has no concept of buttons.
+   */
+  buttons?: { text: string; data: string }[][];
 }
 
 const HELP = `🤖 *IdeaForge Agent*
 I help you move projects forward. Try:
-• /projects — list your projects, then reply with a number to pick one
+• /projects — list your projects, then tap one to pick it
 • /status — where the current project stands
 • /next — the recommended next step
 • /plan — summarize the build plan
 • or just ask me anything about the current project.`;
+
+const ACTION_BUTTONS = [
+  [
+    { text: "📊 Status", data: "/status" },
+    { text: "➡️ Next step", data: "/next" },
+  ],
+  [
+    { text: "🗂 Plan", data: "/plan" },
+    { text: "📁 Switch project", data: "/projects" },
+  ],
+];
 
 export async function handleAgentMessage(input: AgentInput): Promise<string> {
   const text = input.text.trim();
@@ -52,23 +69,33 @@ export async function handleAgentMessage(input: AgentInput): Promise<string> {
     if (projects.length === 0) return "You have no saved projects yet. Create one in IdeaForge first.";
     const current = input.projectId;
     const lines = projects
-      .map((p, i) => `${i + 1}. ${p.id === current ? "*" + p.title + "* ← current" : p.title}`)
+      .map((p) => `• ${p.id === current ? "*" + p.title + "* ← current" : p.title}`)
       .join("\n");
-    return `📁 *Your projects:*\n${lines}\n\nReply with a number (or /use 2) to pick one.`;
+    // One button per project — nothing to type, nothing to mistype.
+    input.buttons = projects.map((p) => [
+      { text: `${p.id === current ? "✓ " : ""}${p.title.slice(0, 40)}`, data: `use:${p.id}` },
+    ]);
+    return `📁 *Your projects:*\n${lines}\n\nTap one to work on it.`;
   }
 
-  // Pick a project by list position: "2" or "/use 2".
-  const pick = cmd.match(/^(?:\/use\s+)?(\d{1,2})$/);
-  if (pick && input.onSelectProject) {
-    const chosen = projects[Number(pick[1]) - 1];
+  // Select a project. `use:<id>` comes from a button tap; the numeric forms are
+  // kept so anyone mid-conversation with the old flow isn't stranded.
+  const byId = cmd.match(/^use:(\S+)$/);
+  const byIndex = cmd.match(/^(?:\/use\s+)?(\d{1,2})$/);
+  if ((byId || byIndex) && input.onSelectProject) {
+    const chosen = byId
+      ? projects.find((p) => p.id === byId[1])
+      : projects[Number(byIndex![1]) - 1];
     if (!chosen) {
-      return `That number isn't on the list. Send /projects to see your ${projects.length} project${projects.length === 1 ? "" : "s"}.`;
+      return `I can't find that project. Send /projects to see your ${projects.length} project${projects.length === 1 ? "" : "s"}.`;
     }
     input.onSelectProject(chosen.id);
     const full = await getProject(chosen.id, input.userId);
-    return full
-      ? `✅ Now working on *${full.title}*.\n\n${statusReply(full)}`
-      : `✅ Now working on *${chosen.title}*.`;
+    if (full) {
+      input.buttons = ACTION_BUTTONS;
+      return `✅ Now working on *${full.title}*.\n\n${statusReply(full)}`;
+    }
+    return `✅ Now working on *${chosen.title}*.`;
   }
 
   const project = input.projectId ? await getProject(input.projectId, input.userId) : null;
@@ -76,7 +103,7 @@ export async function handleAgentMessage(input: AgentInput): Promise<string> {
   if (!project) {
     const hint =
       projects.length > 0
-        ? "Send /projects and reply with a number to pick one."
+        ? "Send /projects and tap one to pick it."
         : "You have no saved projects yet — create one in IdeaForge first.";
     return cmd.startsWith("/")
       ? `No project selected. ${hint}`

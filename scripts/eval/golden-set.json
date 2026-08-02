@@ -1,0 +1,48 @@
+{
+  "description": "Golden set for IdeaForge output quality. Each case states what a good answer must contain, not what it must say word for word — the model is free to phrase things its own way, and the checks assert substance.",
+  "cases": [
+    {
+      "id": "crowded-space",
+      "idea": "An app that reminds students to drink water",
+      "why": "A saturated, low-severity space. The copilot must be willing to say so rather than flatter the user.",
+      "expect": {
+        "severityAtMost": 4,
+        "differentiationAtMost": 4,
+        "verdictMentionsAny": ["saturated", "crowded", "already", "existing", "many", "solved", "not worth"]
+      }
+    },
+    {
+      "id": "high-severity-niche",
+      "idea": "A hyperlocal flash-flood alert tool fusing soil-moisture data with short-term rainfall forecasts",
+      "why": "A genuine life-safety problem in an underserved niche. Should score high on severity and be recognised as technically demanding.",
+      "expect": {
+        "severityAtLeast": 7,
+        "feasibilityAtMost": 7
+      }
+    },
+    {
+      "id": "domain-specificity",
+      "idea": "A tool that analyses satellite imagery to detect illegal deforestation in the Amazon",
+      "why": "Guards against the failure where every idea gets the same generic web stack. A geospatial problem must produce geospatial tooling.",
+      "expect": {
+        "planMentionsAny": [
+          "rasterio", "gdal", "xarray", "geopandas", "postgis", "sentinel",
+          "landsat", "earth engine", "geotiff", "qgis", "satellite", "remote sensing"
+        ],
+        "minMilestones": 3,
+        "minTechStack": 3
+      }
+    },
+    {
+      "id": "grounded-research",
+      "idea": "A campus tool that matches students to research labs by interest",
+      "why": "A space with real incumbents. Research must cite real sources and name existing solutions rather than inventing them.",
+      "expect": {
+        "minCitations": 3,
+        "minExistingSolutions": 2,
+        "allCitationsResolve": true,
+        "everyMarkerHasSource": true
+      }
+    }
+  ]
+}
