@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { KeyRound, Send, Settings as SettingsIcon, ShieldAlert, User } from "lucide-react";
+import { KeyRound, Plug, Send, Settings as SettingsIcon, ShieldAlert, User } from "lucide-react";
 import ConnectTelegram from "@/components/ConnectTelegram";
 import {
   DeleteAccountForm,
@@ -9,6 +9,8 @@ import {
 import { getCurrentUser } from "@/lib/auth/session";
 import { isTelegramLinked } from "@/lib/db/telegram";
 import { isTelegramConfigured } from "@/lib/agents/telegram";
+import IntegrationSettings from "@/components/IntegrationSettings";
+import { integrationStatusAction } from "@/lib/integration-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,7 @@ export default async function SettingsPage() {
 
   const telegramConfigured = isTelegramConfigured();
   const telegramLinked = telegramConfigured && await isTelegramLinked(user.id);
+  const integrations = await integrationStatusAction();
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10">
@@ -32,8 +35,15 @@ export default async function SettingsPage() {
           <ProfileForm name={user.name} locale={user.locale} email={user.email} username={user.username} />
         </Card>
 
+        <Card icon={<Plug className="size-4 text-brand" />} title="Connected apps">
+          <IntegrationSettings
+            connections={integrations?.connections ?? []}
+            available={integrations?.available ?? { notion: false, google: false }}
+          />
+        </Card>
+
         {telegramConfigured && (
-          <Card icon={<Send className="size-4 text-brand" />} title="Integrations">
+          <Card icon={<Send className="size-4 text-brand" />} title="Telegram">
             <ConnectTelegram linked={telegramLinked} />
           </Card>
         )}

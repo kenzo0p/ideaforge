@@ -1,8 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useState as useReactState } from "react";
-import { Check, ChevronDown, Copy, Download, FileText, FileType, Presentation, Printer } from "lucide-react";
+import { useState as useReactState, useTransition } from "react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Download,
+  ExternalLink,
+  FileText,
+  FileType,
+  Loader2,
+  Presentation,
+  Printer,
+} from "lucide-react";
+import { exportToGoogleDocsAction, exportToNotionAction } from "@/lib/integration-actions";
 
 // Export dropdown.
 //
@@ -11,9 +23,45 @@ import { Check, ChevronDown, Copy, Download, FileText, FileType, Presentation, P
 // Google Docs opens .docx directly; Notion pastes Markdown as real blocks. So
 // the honest version is to label the formats by where they actually go, and add
 // a clipboard copy for the Notion path.
-export default function ExportMenu({ projectId }: { projectId: string }) {
+export default function ExportMenu({
+  projectId,
+  integrations,
+}: {
+  projectId: string;
+  /** Which providers are configured on the server and connected by this user. */
+  integrations?: { notionAvailable: boolean; googleAvailable: boolean };
+}) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useReactState(false);
+  const [busy, setBusy] = useReactState<"notion" | "google" | null>(null);
+  const [sent, setSent] = useReactState<{ url: string; label: string } | null>(null);
+  const [error, setError] = useReactState<string | null>(null);
+  const [, startExport] = useTransition();
+
+  /**
+   * Push the brief to a connected tool.
+   *
+   * A missing connection isn't an error — it's a redirect to the consent
+   * screen, with `next` set so the user lands back here afterwards.
+   */
+  function pushTo(provider: "notion" | "google") {
+    setBusy(provider);
+    setError(null);
+    setSent(null);
+    startExport(async () => {
+      const run = provider === "notion" ? exportToNotionAction : exportToGoogleDocsAction;
+      const res = await run(projectId);
+      setBusy(null);
+      if (res.needsConnect) {
+        window.location.href = `/api/integrations/connect?provider=${res.needsConnect}&next=${encodeURIComponent(
+          window.location.pathname + window.location.search,
+        )}`;
+        return;
+      }
+      if (res.error) return setError(res.error);
+      if (res.url) setSent({ url: res.url, label: provider === "notion" ? "Notion" : "Google Docs" });
+    });
+  }
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -89,6 +137,35 @@ export default function ExportMenu({ projectId }: { projectId: string }) {
               <span className="block text-xs text-muted">.pptx deck</span>
             </span>
           </a>
+          {integrations?.googleAvailable && (
+            <button onClick={() => pushTo("google")} className={item} type="button" disabled={!!busy}>
+              {busy === "google" ? (
+                <Loader2 className="size-4 animate-spin text-brand" />
+              ) : (
+                <FileType className="size-4 text-brand" />
+              )}
+              <span className="flex-1">
+                Send to Google Docs
+                <span className="block text-xs text-muted">Creates an editable doc</span>
+              </span>
+            </button>
+          )}
+          {integrations?.notionAvailable && (
+            <button onClick={() => pushTo("notion")} className={item} type="button" disabled={!!busy}>
+              {busy === "notion" ? (
+                <Loader2 className="size-4 animate-spin text-brand" />
+              ) : (
+                <FileText className="size-4 text-brand" />
+              )}
+              <span className="flex-1">
+                Send to Notion
+                <span className="block text-xs text-muted">Creates a page in your workspace</span>
+              </span>
+            </button>
+          )}
+
+          <div className="my-1 border-t border-border" />
+
           <button onClick={copyForNotion} className={item} type="button">
             {copied ? (
               <Check className="size-4 text-success" />
@@ -109,6 +186,23 @@ export default function ExportMenu({ projectId }: { projectId: string }) {
               <span className="block text-xs text-muted">.md file</span>
             </span>
           </a>
+          {sent && (
+            <a
+              href={sent.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="m-1 flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm text-success"
+            >
+              <Check className="size-4 shrink-0" />
+              <span className="flex-1">Created in {sent.label} — open it</span>
+              <ExternalLink className="size-3.5 shrink-0" />
+            </a>
+          )}
+          {error && (
+            <p role="alert" className="m-1 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
+              {error}
+            </p>
+          )}
         </div>
       )}
     </div>

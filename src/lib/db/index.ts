@@ -214,6 +214,10 @@ async function ensureIndexes(db: Db): Promise<void> {
     db.collection("projectInvites").createIndex({ expiresAt: 1 }, ttl),
 
     db.collection("projectComments").createIndex({ projectId: 1, createdAt: 1 }),
+
+    db.collection("integrations").createIndex({ userId: 1 }),
+    // OAuth state is short-lived by design; let Mongo reap it.
+    db.collection("oauthStates").createIndex({ expiresAt: 1 }, ttl),
     db.collection("projectComments").createIndex({ userId: 1 }),
     // Sparse: only shared projects carry a token, and null must not collide.
     db.collection("projects").createIndex(

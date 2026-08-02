@@ -14,6 +14,7 @@ import ShareProject from "@/components/ShareProject";
 import Collaborators from "@/components/Collaborators";
 import CommentThread from "@/components/CommentThread";
 import { collaborationStateAction } from "@/lib/collab-actions";
+import { integrationStatusAction } from "@/lib/integration-actions";
 import RealtimeRefresh from "@/components/RealtimeRefresh";
 import { getMilestoneProgress, getProject, listWorkspaceItems } from "@/lib/db/projects";
 import { listRemindersForProject, listReminderLogs } from "@/lib/db/reminders";
@@ -51,6 +52,7 @@ export default async function ProjectPage({
   const reminderHistory = await listReminderLogs(id, user.id);
   const completedMilestones = await getMilestoneProgress(id);
   const collab = await collaborationStateAction(id);
+  const integrationStatus = await integrationStatusAction();
 
   return (
     <main className="mx-auto w-full max-w-6xl px-5 py-8">
@@ -67,7 +69,13 @@ export default async function ProjectPage({
           <p className="mt-1 text-sm text-muted">{project.idea}</p>
           <p className="mt-2 text-xs text-muted">Updated {timeAgo(project.updatedAt)}</p>
         </div>
-        <ExportMenu projectId={project.id} />
+        <ExportMenu
+          projectId={project.id}
+          integrations={{
+            notionAvailable: integrationStatus?.available.notion ?? false,
+            googleAvailable: integrationStatus?.available.google ?? false,
+          }}
+        />
       </header>
 
       <ProjectTabBar
