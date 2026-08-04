@@ -1,9 +1,12 @@
 import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getSubscription } from "@/lib/db/subscriptions";
 import { listProjects } from "@/lib/db/projects";
 import { effectivePlan, type Plan, type PlanFeatures } from "./plans";
+import { planFor } from "./resolve";
+
+// Re-exported so every gate keeps importing its plan from one place.
+export { planFor };
 
 // ---------------------------------------------------------------------------
 // Entitlements — the single server-side answer to "is this allowed?".
@@ -25,11 +28,6 @@ export interface Entitlement {
 }
 
 const ALLOW: Entitlement = { allowed: true };
-
-/** The plan a user is actually on right now. */
-export async function planFor(userId: string): Promise<Plan> {
-  return effectivePlan(await getSubscription(userId));
-}
 
 /** Plan for the signed-in user, or the free plan when signed out. */
 export async function currentPlan(): Promise<Plan> {

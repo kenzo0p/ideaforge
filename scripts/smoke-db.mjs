@@ -17,6 +17,10 @@ const rl = await import("../src/lib/db/ratelimit.ts");
 const cb = await import("../src/lib/db/collaboration.ts");
 const un = await import("../src/lib/username.ts");
 const w = await import("../src/lib/db/watches.ts");
+const o = await import("../src/lib/db/orgs.ts");
+const ent2 = await import("../src/lib/billing/resolve.ts");
+const dom = await import("../src/lib/orgs/domains.ts");
+const ent = await import("../src/lib/billing/plans.ts");
 
 let failed = 0;
 const eq = (label, actual, expected) => {
@@ -332,6 +336,112 @@ console.log("\n\x1b[1mgoogle sign-in linking\x1b[0m");
 
   await u.deleteUser(gUser.id);
   await u.deleteUser(pwUser.id);
+}
+
+console.log("\n\x1b[1morganisations\x1b[0m");
+{
+  // Domain policy is the whole security model for auto-join, so it is checked
+  // before anything that depends on it.
+  eq("domainOf lowercases", dom.domainOf("A@IITB.ac.in"), "iitb.ac.in");
+  eq("domainOf rejects a bare host", dom.domainOf("a@localhost"), null);
+  eq("domainOf rejects no address", dom.domainOf("nope"), null);
+  ok("gmail is public", dom.isPublicDomain("gmail.com"));
+  ok("an institution is not", !dom.isPublicDomain("iitb.ac.in"));
+  ok("claiming gmail is refused", !!dom.rejectDomainClaim("gmail.com", "a@gmail.com"));
+  eq("claiming your own domain is allowed", dom.rejectDomainClaim("iitb.ac.in", "a@iitb.ac.in"), null);
+  eq("a subdomain of your own is allowed", dom.rejectDomainClaim("cse.iitb.ac.in", "a@iitb.ac.in"), null);
+  ok("claiming the parent from a subdomain is refused",
+     !!dom.rejectDomainClaim("iitb.ac.in", "a@cse.iitb.ac.in"));
+  ok("claiming an unrelated domain is refused",
+     !!dom.rejectDomainClaim("mit.edu", "a@iitb.ac.in"));
+
+  const stamp = Date.now();
+  const domain = `smoke-${stamp}.test`;
+  const prof = await u.createUser(`prof-${stamp}@${domain}`, "salt:hash", "Prof");
+  const student = await u.createUser(`stud-${stamp}@${domain}`, "salt:hash", "Student");
+  const outsider = await u.createUser(`out-${stamp}@elsewhere.test`, "salt:hash", "Outsider");
+
+  const org = await o.createOrg({ name: `Smoke Lab ${stamp}`, createdBy: prof.id, seats: 2 });
+  eq("creator is the owner", (await o.roleIn(org.id, prof.id)), "owner");
+  eq("creating counts as one seat", await o.countOrgMembers(org.id), 1);
+  ok("slug is url-safe", /^[a-z0-9-]+$/.test(org.slug));
+
+  eq("domain claim sticks", await o.addOrgDomain(org.id, domain), true);
+
+  // Auto-join.
+  const joined = await o.autoJoinByDomain(student.id, `stud-${stamp}@${domain}`);
+  eq("a matching address joins", joined.joined, true);
+  eq("and joins as a member", await o.roleIn(org.id, student.id), "member");
+  const twice = await o.autoJoinByDomain(student.id, `stud-${stamp}@${domain}`);
+  eq("joining twice is a no-op", twice.joined, false);
+  const nomatch = await o.autoJoinByDomain(outsider.id, `out-${stamp}@elsewhere.test`);
+  eq("a non-matching address does not join", nomatch.joined, false);
+
+  // Seats are the cap on the one path that adds people without a decision.
+  const extra = await u.createUser(`extra-${stamp}@${domain}`, "salt:hash", "Extra");
+  const full = await o.autoJoinByDomain(extra.id, `extra-${stamp}@${domain}`);
+  eq("a full workspace stops absorbing signups", full.reason, "full");
+
+  // Two workspaces cannot own the same domain.
+  const rival = await o.createOrg({ name: `Rival ${stamp}`, createdBy: outsider.id });
+  eq("a claimed domain cannot be re-claimed", await o.addOrgDomain(rival.id, domain), false);
+
+  // Entitlements: the seat is what the plan check has to see.
+  eq("org plan beats free", ent.betterPlan(ent.PLANS.free, ent.PLANS.team).id, "team");
+  eq("a personal Pro is not downgraded by a Pro org",
+     ent.betterPlan(ent.PLANS.pro, ent.PLANS.pro).id, "pro");
+  eq("a personal Team beats an org Pro", ent.betterPlan(ent.PLANS.team, ent.PLANS.pro).id, "team");
+  // A workspace nobody has paid for grants nothing — creating one must not be
+  // a way to hand yourself the most expensive plan.
+  eq("a new workspace is free", (await ent2.planFor(student.id)).id, "free");
+  await o.setOrgPlan({ orgId: org.id, planId: "team", status: "active" });
+  eq("a paid workspace lifts its members", (await ent2.planFor(student.id)).id, "team");
+  const stranger = await u.createUser(`nobody-${stamp}@elsewhere.test`, "salt:hash", "Nobody");
+  eq("someone in no workspace gets nothing", (await ent2.planFor(stranger.id)).id, "free");
+  await u.deleteUser(stranger.id);
+
+  // Mentor visibility.
+  const studentProject = await p.createProject({
+    userId: student.id, title: "Student idea", idea: "Something worth building",
+  });
+  ok("a plain member cannot read a peer", !(await o.canMentorView(student.id, prof.id)));
+  ok("an owner can read a member", await o.canMentorView(prof.id, student.id));
+  ok("an outsider cannot", !(await o.canMentorView(outsider.id, student.id)));
+  ok("you can always read yourself", await o.canMentorView(student.id, student.id));
+
+  await o.setOrgRole(org.id, student.id, "mentor");
+  ok("a promoted mentor can read a peer", await o.canMentorView(student.id, prof.id));
+  await o.setOrgRole(org.id, student.id, "member");
+
+  const asMentor = await p.getProjectForViewer(studentProject.id, prof.id);
+  eq("the mentor read path flags itself", asMentor?.asMentor, true);
+  eq("and returns the project", asMentor?.project.id, studentProject.id);
+  eq("an outsider gets nothing", await p.getProjectForViewer(studentProject.id, outsider.id), null);
+  const asOwner = await p.getProjectForViewer(studentProject.id, student.id);
+  eq("the owner is not flagged as a mentor", asOwner?.asMentor, false);
+  // The narrow path must stay narrow: mentors are not collaborators.
+  eq("getProject still refuses the mentor", await p.getProject(studentProject.id, prof.id), null);
+
+  const overview = await o.orgProjectOverview(org.id);
+  const studentRow = overview.find((row) => row.userId === student.id);
+  eq("the overview counts the project", studentRow?.projects, 1);
+  eq("and knows it has no plan yet", studentRow?.withPlan, 0);
+
+  // Last-owner protection.
+  eq("the only owner cannot be demoted", await o.setOrgRole(org.id, prof.id, "member"), false);
+  eq("the only owner cannot be removed", await o.removeOrgMember(org.id, prof.id), false);
+  eq("a member can be removed", await o.removeOrgMember(org.id, student.id), true);
+
+  // Deleting the last owner's account must not strand the workspace.
+  await o.addOrgMember(org.id, student.id, "member", "invite");
+  await u.deleteUser(prof.id);
+  eq("the longest-standing member inherits it", await o.roleIn(org.id, student.id), "owner");
+  await u.deleteUser(student.id);
+  eq("an emptied workspace is removed", await o.getOrg(org.id), null);
+
+  await u.deleteUser(outsider.id);
+  await u.deleteUser(extra.id);
+  eq("its rival goes with its last member", await o.getOrg(rival.id), null);
 }
 
 console.log("\n\x1b[1mcascade on delete (no foreign keys in Mongo)\x1b[0m");

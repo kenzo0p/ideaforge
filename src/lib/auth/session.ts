@@ -5,6 +5,7 @@ import {
   getUserForSession,
   type User,
 } from "@/lib/db/users";
+import { attachToOrgOnLogin } from "@/lib/orgs/join";
 
 // Session cookie management. Opaque token in an HttpOnly cookie; the token maps
 // to a row in the `sessions` table (see db/users.ts).
@@ -29,6 +30,9 @@ export async function startSession(userId: string): Promise<void> {
   const { token } = await createSession(userId);
   const jar = await cookies();
   jar.set(COOKIE, token, sessionCookieOptions());
+  // Every route into the app funnels through here, which makes it the one place
+  // organisation membership can be picked up without missing a sign-in path.
+  await attachToOrgOnLogin(userId);
 }
 
 /** Clear the current session (DB row + cookie). */

@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { col } from "./index";
+import { reconcileOrgOwnership } from "./orgs";
 import { normalizeUsername, suggestUsername, USERNAME_MAX } from "@/lib/username";
 
 // ---------------------------------------------------------------------------
@@ -178,6 +179,9 @@ export async function updateUserPassword(userId: string, passwordHash: string): 
  * Add to this list whenever a new user-owned collection appears.
  */
 export async function deleteUser(userId: string): Promise<void> {
+  // Read before the delete: which workspace they were in is gone afterwards.
+  const membership = await (await col<{ orgId: string }>("orgMembers")).findOne({ userId });
+
   const owned = [
     "projects",
     "sessions",
@@ -194,6 +198,9 @@ export async function deleteUser(userId: string): Promise<void> {
     "watches",
     "watchFindings",
     "analyticsEvents",
+    // A membership left behind would keep the person on the workspace roster —
+    // a ghost seat consumed, and a name a mentor can still click through to.
+    "orgMembers",
   ];
   await Promise.all(
     owned.map(async (name) => (await col(name)).deleteMany({ userId })),
@@ -209,6 +216,9 @@ export async function deleteUser(userId: string): Promise<void> {
   if (user?.email) {
     await (await col("projectInvites")).deleteMany({ email: user.email });
   }
+  // The membership row is gone by now; if that was the workspace's only owner,
+  // hand it to whoever has been there longest rather than stranding it.
+  if (membership) await reconcileOrgOwnership(membership.orgId);
 
   await (await users()).deleteOne({ _id: userId });
 }

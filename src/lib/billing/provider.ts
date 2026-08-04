@@ -41,6 +41,8 @@ export interface BillingProvider {
     planId: PlanId;
     userId: string;
     email: string;
+    /** "org" buys a workspace's plan rather than a personal seat. */
+    scope?: "user" | "org";
   }): Promise<CheckoutSession>;
   /** Ask the gateway to stop renewing. */
   cancelSubscription(providerSubscriptionId: string): Promise<void>;
@@ -82,6 +84,7 @@ class RazorpayProvider implements BillingProvider {
     planId: PlanId;
     userId: string;
     email: string;
+    scope?: "user" | "org";
   }): Promise<CheckoutSession> {
     const plan = razorpayPlanId(input.planId);
     if (!plan) throw new Error(`No Razorpay plan configured for "${input.planId}".`);
@@ -99,7 +102,15 @@ class RazorpayProvider implements BillingProvider {
         customer_notify: 1,
         // Echoed back on every webhook, which is how an event finds its user
         // without a lookup table.
-        notes: { userId: input.userId, email: input.email, appPlan: input.planId },
+        notes: {
+          userId: input.userId,
+          email: input.email,
+          appPlan: input.planId,
+          // Carried for reconciliation only. What a webhook applies to is
+          // decided by which record holds the subscription id, never by a note
+          // the gateway echoes back.
+          scope: input.scope ?? "user",
+        },
       }),
     });
 
@@ -181,9 +192,16 @@ class MockBillingProvider implements BillingProvider {
   readonly id = "mock";
   readonly isMock = true;
 
-  async createSubscription(input: { planId: PlanId; userId: string }): Promise<CheckoutSession> {
+  async createSubscription(input: {
+    planId: PlanId;
+    userId: string;
+    scope?: "user" | "org";
+  }): Promise<CheckoutSession> {
+    // The scope has to survive the round trip, or the simulated "payment"
+    // upgrades a personal seat when the owner was buying the workspace.
+    const scope = input.scope === "org" ? "&scope=org" : "";
     return {
-      url: `/api/billing/simulate?plan=${input.planId}`,
+      url: `/api/billing/simulate?plan=${input.planId}${scope}`,
       subscriptionId: `mock_sub_${input.userId.slice(0, 8)}_${input.planId}`,
       simulated: true,
     };

@@ -12,7 +12,14 @@ import {
   deleteComment,
   type CommentAnchor,
 } from "@/lib/db/collaboration";
-import { addMember, getProject, isProjectOwner, listMembers, removeMember } from "@/lib/db/projects";
+import {
+  addMember,
+  getProject,
+  getProjectForViewer,
+  isProjectOwner,
+  listMembers,
+  removeMember,
+} from "@/lib/db/projects";
 import { getUserByUsername, searchUsers } from "@/lib/db/users";
 import { normalizeUsername, validateUsername } from "@/lib/username";
 import { canAddCollaborator, canUseFeature } from "@/lib/billing/entitlements";
@@ -172,8 +179,9 @@ export async function addCommentAction(
 ): Promise<CollabState> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sign in first." };
-  // Access, not ownership: collaborators are the whole point of comments.
-  if (!(await getProject(projectId, user.id))) return { error: "Project not found." };
+  // Access, not ownership: collaborators are the whole point of comments, and a
+  // workspace mentor whose feedback is the point of the mentor view counts too.
+  if (!(await getProjectForViewer(projectId, user.id))) return { error: "Project not found." };
 
   const text = body.trim();
   if (!text) return { error: "Write something first." };
@@ -188,6 +196,8 @@ export async function addCommentAction(
   });
   publish(`project:${projectId}`, { type: "comment", actorId: user.id });
   revalidatePath(`/projects/${projectId}`);
+  // Mentors read and comment from their own view of the project, not the owner's.
+  revalidatePath(`/org/projects/${projectId}`);
   return { ok: true };
 }
 

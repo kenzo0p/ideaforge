@@ -110,6 +110,21 @@ export const PLANS: Record<PlanId, Plan> = {
 
 export const DEFAULT_PLAN: PlanId = "free";
 
+/** Ordering, for picking the better of two entitlements. */
+const PLAN_RANK: Record<PlanId, number> = { free: 0, pro: 1, team: 2 };
+
+/**
+ * The better of two plans.
+ *
+ * Someone can hold a personal subscription *and* a seat in an organisation. The
+ * higher one wins: a student who already pays for Pro and then joins their
+ * department's Team workspace must not be quietly downgraded, and neither
+ * should they have to cancel to get the seat they were given.
+ */
+export function betterPlan(a: Plan, b: Plan): Plan {
+  return PLAN_RANK[b.id] > PLAN_RANK[a.id] ? b : a;
+}
+
 export function getPlan(id: string | null | undefined): Plan {
   return PLANS[(id ?? DEFAULT_PLAN) as PlanId] ?? PLANS[DEFAULT_PLAN];
 }

@@ -228,6 +228,25 @@ async function ensureIndexes(db: Db): Promise<void> {
     db.collection("watchFindings").createIndex({ userId: 1, seen: 1, foundAt: -1 }),
     db.collection("watchFindings").createIndex({ projectId: 1, foundAt: -1 }),
 
+    db.collection("orgs").createIndex({ slug: 1 }, { unique: true }),
+    // Unique across *all* workspaces: two orgs claiming the same domain would
+    // each silently absorb the other's people. The partial filter keeps orgs
+    // that have claimed nothing out of the index — an empty array would
+    // otherwise index as a single null key and collide with every other one.
+    db.collection("orgs").createIndex(
+      { emailDomains: 1 },
+      { unique: true, partialFilterExpression: { emailDomains: { $type: "string" } } },
+    ),
+    // One workspace per person. The uniqueness is the assumption the whole
+    // "what plan is this user on?" lookup rests on.
+    db.collection("orgMembers").createIndex({ userId: 1 }, { unique: true }),
+    db.collection("orgMembers").createIndex({ orgId: 1, role: 1 }),
+    // Billing webhooks arrive with a gateway id and nothing else.
+    db.collection("orgs").createIndex(
+      { providerSubscriptionId: 1 },
+      { unique: true, sparse: true },
+    ),
+
     db.collection("integrations").createIndex({ userId: 1 }),
     // OAuth state is short-lived by design; let Mongo reap it.
     db.collection("oauthStates").createIndex({ expiresAt: 1 }, ttl),

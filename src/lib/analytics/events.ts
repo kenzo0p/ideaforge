@@ -33,6 +33,13 @@ export const EVENTS = {
   WATCH_STOPPED: "watch_stopped",
   WATCH_FINDINGS: "watch_findings",
 
+  // Organisations — tracked apart from consumer subscriptions because one
+  // institutional signup is worth dozens of individual ones, and mixing them
+  // makes both numbers meaningless.
+  ORG_CREATED: "org_created",
+  ORG_MEMBER_JOINED: "org_member_joined",
+  ORG_PROJECT_VIEWED: "org_project_viewed",
+
   // Monetisation
   LIMIT_HIT: "limit_hit",
   UPGRADE_PROMPT_SHOWN: "upgrade_prompt_shown",

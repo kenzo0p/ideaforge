@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   Bell,
   Bot,
+  Building2,
   Compass,
   FileText,
   FolderKanban,
@@ -54,6 +55,7 @@ const NAV = [
   // Visible signed-out too: someone evaluating the product should be able to
   // see what it costs without creating an account first.
   { href: "/pricing", label: "Plans", icon: CreditCard, authOnly: false },
+  { href: "/org", label: "Workspace", icon: Building2, authOnly: true },
   { href: "/settings", label: "Settings", icon: Settings, authOnly: true },
 ];
 

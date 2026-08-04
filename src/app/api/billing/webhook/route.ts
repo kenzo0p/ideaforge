@@ -6,6 +6,7 @@ import {
   recordBillingEvent,
   setSubscriptionStatus,
 } from "@/lib/db/subscriptions";
+import { findOrgByProviderSubscriptionId, setOrgSubscriptionStatus } from "@/lib/db/orgs";
 
 export const runtime = "nodejs";
 
@@ -44,6 +45,29 @@ export async function POST(req: Request) {
 
   if (!event.providerSubscriptionId) return Response.json({ ok: true });
 
+  const { status: mapped } = mapProviderStatus(event.status);
+
+  // A workspace subscription is billed through the same gateway and arrives
+  // through the same webhook, so it is resolved here before giving up.
+  const org = await findOrgByProviderSubscriptionId(event.providerSubscriptionId);
+  if (org) {
+    await setOrgSubscriptionStatus(org.id, mapped, {
+      ...(event.currentPeriodEnd ? { currentPeriodEnd: event.currentPeriodEnd } : {}),
+    });
+    if (mapped === "active") {
+      void track(EVENTS.SUBSCRIPTION_ACTIVATED, {
+        props: { plan: org.planId, scope: "org", seats: org.seats },
+      });
+    } else if (mapped === "cancelled") {
+      void track(EVENTS.SUBSCRIPTION_CANCELLED, { props: { plan: org.planId, scope: "org" } });
+    }
+    await recordBillingEvent({
+      type: `applied.org.${event.type}`,
+      payload: { orgId: org.id, status: mapped },
+    });
+    return Response.json({ ok: true });
+  }
+
   const sub = await findByProviderSubscriptionId(event.providerSubscriptionId);
   if (!sub) {
     // Arrived before checkout finished writing, or belongs to another
@@ -52,7 +76,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: true });
   }
 
-  const { status } = mapProviderStatus(event.status);
+  const status = mapped;
   await setSubscriptionStatus(sub.userId, status, {
     ...(event.currentPeriodEnd ? { currentPeriodEnd: event.currentPeriodEnd } : {}),
     ...(event.type === "subscription.cancelled" ? { cancelAtPeriodEnd: true } : {}),

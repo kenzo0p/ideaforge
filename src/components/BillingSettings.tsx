@@ -8,6 +8,8 @@ import { formatPrice } from "@/lib/billing/plans";
 
 interface Status {
   plan: { id: string; name: string; pricePaise: number; limits: { projects: number | null; dailyRuns: number } };
+  /** Workspace name when the plan comes from a seat rather than a purchase. */
+  viaOrg: string | null;
   status: string | null;
   currentPeriodEnd: number | null;
   cancelAtPeriodEnd: boolean;
@@ -20,6 +22,8 @@ export default function BillingSettings({ status }: { status: Status }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const paid = status.plan.id !== "free";
+  // A seat isn't theirs to cancel or change — the workspace owner holds it.
+  const ownsIt = paid && !status.viaOrg;
   const renews = status.currentPeriodEnd
     ? new Date(status.currentPeriodEnd).toLocaleDateString()
     : null;
@@ -32,13 +36,17 @@ export default function BillingSettings({ status }: { status: Status }) {
         <span className="rounded-full bg-brand/10 px-3 py-1 text-sm font-semibold text-brand">
           {status.plan.name}
         </span>
-        {paid && (
-          <span className="text-sm text-muted">
-            {formatPrice(status.plan.pricePaise)}/month
-            {renews && (status.cancelAtPeriodEnd ? ` · ends ${renews}` : ` · renews ${renews}`)}
-          </span>
+        {status.viaOrg ? (
+          <span className="text-sm text-muted">via {status.viaOrg}</span>
+        ) : (
+          paid && (
+            <span className="text-sm text-muted">
+              {formatPrice(status.plan.pricePaise)}/month
+              {renews && (status.cancelAtPeriodEnd ? ` · ends ${renews}` : ` · renews ${renews}`)}
+            </span>
+          )
         )}
-        {status.simulated && paid && (
+        {status.simulated && ownsIt && (
           <span className="rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs text-warning">
             Simulated
           </span>
@@ -73,11 +81,11 @@ export default function BillingSettings({ status }: { status: Status }) {
           className="inline-flex items-center gap-1.5 rounded-lg bg-brand-solid px-3.5 py-2 text-sm font-semibold text-on-brand transition hover:opacity-90"
         >
           <CreditCard className="size-4" />
-          {paid ? "Change plan" : "Upgrade"}
+          {ownsIt ? "Change plan" : paid ? "See plans" : "Upgrade"}
           <ArrowUpRight className="size-3.5" />
         </Link>
 
-        {paid && !status.cancelAtPeriodEnd && (
+        {ownsIt && !status.cancelAtPeriodEnd && (
           <button
             onClick={() =>
               start(async () => {
@@ -93,7 +101,7 @@ export default function BillingSettings({ status }: { status: Status }) {
         )}
       </div>
 
-      {paid && status.cancelAtPeriodEnd && renews && (
+      {ownsIt && status.cancelAtPeriodEnd && renews && (
         <p className="text-xs text-muted">
           Cancelled — you keep {status.plan.name} until {renews}, then move to Free.
         </p>

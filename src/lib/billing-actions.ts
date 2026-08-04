@@ -4,17 +4,35 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getSubscription, setSubscriptionStatus, recordBillingEvent } from "@/lib/db/subscriptions";
 import { getBillingProvider } from "@/lib/billing/provider";
-import { effectivePlan } from "@/lib/billing/plans";
+import { planFor } from "@/lib/billing/resolve";
+import { membershipFor } from "@/lib/db/orgs";
 import { listProjects } from "@/lib/db/projects";
 
-/** Everything the billing UI needs: plan, usage against limits, gateway mode. */
+/**
+ * Everything the billing UI needs: plan, usage against limits, gateway mode.
+ *
+ * The plan shown here is the *resolved* one, so it matches what the gates
+ * actually enforce. Reading the personal subscription alone would tell someone
+ * on a workspace seat that they were on Free while the app happily let them use
+ * Team features — the settings page and the enforcement layer must never
+ * disagree about what you have.
+ */
 export async function billingStatusAction() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const sub = await getSubscription(user.id);
-  const plan = effectivePlan(sub);
+  const [sub, plan, membership] = await Promise.all([
+    getSubscription(user.id),
+    planFor(user.id),
+    membershipFor(user.id),
+  ]);
   const owned = (await listProjects(user.id)).filter((p) => p.isOwner).length;
+
+  // Whether this plan comes from the workspace rather than a personal purchase
+  // decides what the UI may offer: there is nothing here for them to cancel.
+  const viaOrg = membership && plan.id === membership.org.planId && plan.id !== "free"
+    ? membership.org.name
+    : null;
 
   return {
     plan: {
@@ -27,6 +45,7 @@ export async function billingStatusAction() {
         collaboratorsPerProject: plan.limits.collaboratorsPerProject,
       },
     },
+    viaOrg,
     status: sub?.status ?? null,
     currentPeriodEnd: sub?.currentPeriodEnd ?? null,
     cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,

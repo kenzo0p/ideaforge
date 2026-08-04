@@ -39,6 +39,7 @@ export default function UpgradePrompt({
   limit,
   onDismiss,
   compact = false,
+  scope = "user",
 }: {
   /** What the server said, in the user's terms. */
   reason: string;
@@ -48,6 +49,8 @@ export default function UpgradePrompt({
   onDismiss?: () => void;
   /** Inline variant for tight spaces like the invite box. */
   compact?: boolean;
+  /** "org" buys the workspace's plan for everyone in it, not a personal seat. */
+  scope?: "user" | "org";
 }) {
   const [busy, setBusy] = useState(false);
   const impression = useRef<string | null>(null);
@@ -71,7 +74,7 @@ export default function UpgradePrompt({
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ plan, scope }),
       });
       const data = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !data.url) throw new Error(data.error ?? "Could not start checkout.");

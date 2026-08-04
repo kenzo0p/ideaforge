@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { col } from "./index";
+import { canMentorView } from "./orgs";
 import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
 
 // ---------------------------------------------------------------------------
@@ -191,6 +192,28 @@ export async function updateProjectArtifacts(
 export async function getProject(id: string, userId: string): Promise<Project | null> {
   const d = await (await projects()).findOne({ _id: id, ...accessFilter(userId) });
   return d ? toProject(d) : null;
+}
+
+/**
+ * Fetch a project for someone who may be reading it as a workspace mentor.
+ *
+ * Kept separate from `getProject` deliberately. Every mutating path in the app
+ * uses `getProject` as its authorisation check, so widening that function would
+ * silently hand mentors write access to a whole cohort's work. This one is
+ * read-only by construction: only the surfaces that explicitly want mentor
+ * visibility call it, and they get told which kind of access they have.
+ */
+export async function getProjectForViewer(
+  id: string,
+  viewerId: string,
+): Promise<{ project: Project; asMentor: boolean } | null> {
+  const direct = await getProject(id, viewerId);
+  if (direct) return { project: direct, asMentor: false };
+
+  const d = await (await projects()).findOne({ _id: id });
+  if (!d) return null;
+  if (!(await canMentorView(viewerId, d.userId))) return null;
+  return { project: toProject(d), asMentor: true };
 }
 
 /** True only for the owner. Guards renaming, deleting, sharing, and invites. */

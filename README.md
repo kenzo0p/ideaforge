@@ -62,6 +62,16 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   Commands (`/status`, `/next`, `/plan`, `/projects`) run locally; free-text is answered by the
   LLM grounded in the project's saved artifacts. Works with no token; connects a real bot when
   `TELEGRAM_BOT_TOKEN` is set (see `.env.example`).
+- **`lib/billing`** — plans, entitlements, and the payment provider seam. `plans.ts` is the one
+  table describing what each tier gets; `resolve.ts` answers "what plan is this user on?" by
+  taking the better of their own subscription and their workspace's; `entitlements.ts` is the
+  only place that answers "is this allowed?", so a gate can never be enforced in one route and
+  forgotten in its sibling.
+- **`lib/db/orgs` + `lib/orgs`** — organisations: a lab, class, or cohort on one plan. Members
+  join automatically by verified email domain, and mentors can read and comment on the whole
+  workspace's projects without being invited to each one. Domain claims are checked against the
+  claimant's own address and public mailbox providers can never be claimed, which is what stops
+  a domain claim from being a way to adopt strangers.
 - **Multilingual** — an 8-language selector threads a BCP-47 `locale` through every prompt, so a
   live model responds in the chosen language across validation, research, plan, and the agent.
 
