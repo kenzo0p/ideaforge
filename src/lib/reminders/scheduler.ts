@@ -32,9 +32,16 @@ export function startReminderScheduler(): void {
   if (g.__ideaforgeReminderScheduler) return;
   g.__ideaforgeReminderScheduler = true;
   console.log("⏰ Reminder scheduler started.");
+  const tick = async () => {
+    await runDueReminders();
+    // Watches share the timer: both are "do the due work" and neither is
+    // urgent, so a second interval would just be more moving parts.
+    const { runDueWatches } = await import("@/lib/watch/runner");
+    await runDueWatches();
+  };
   setTimeout(() => {
-    void runDueReminders();
-    setInterval(() => void runDueReminders(), TICK_MS);
+    void tick();
+    setInterval(() => void tick(), TICK_MS);
   }, FIRST_TICK_MS).unref?.();
 }
 

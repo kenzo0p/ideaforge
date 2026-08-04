@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ArrowRight, ExternalLink, Loader2, Plus, Scale, Trophy, X } from "lucide-react";
 import { USAGE_EVENT } from "@/components/UsageMeter";
+import UpgradePrompt, { parseLimitError } from "@/components/UpgradePrompt";
 import type { IdeaComparison, IdeaScores, RankedIdea } from "@/lib/insights/types";
 
 const MAX_IDEAS = 3;
@@ -113,6 +114,12 @@ export default function ComparePanel({
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<IdeaComparison | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Compare is Pro-only, so this is the gate most free users meet first.
+  const [limitHit, setLimitHit] = useState<{
+    reason: string;
+    plan: "pro" | "team";
+    limit: string;
+  } | null>(null);
 
   const filled = ideas.map((i) => i.trim()).filter(Boolean);
   const canRun = filled.length >= 2 && status !== "loading";
@@ -125,6 +132,7 @@ export default function ComparePanel({
     if (!canRun) return;
     setStatus("loading");
     setError(null);
+    setLimitHit(null);
     try {
       const res = await fetch("/api/compare", {
         method: "POST",
@@ -133,7 +141,18 @@ export default function ComparePanel({
       });
       window.dispatchEvent(new Event(USAGE_EVENT));
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          upgradeTo?: string;
+          upgrade?: boolean;
+          quota?: string;
+        };
+        const limit = parseLimitError(res.status, body);
+        if (limit) {
+          setLimitHit(limit);
+          setStatus("idle");
+          return;
+        }
         throw new Error(body.error ?? "Comparison failed.");
       }
       setResult((await res.json()) as IdeaComparison);
@@ -206,6 +225,15 @@ export default function ComparePanel({
             )}
           </button>
         </div>
+
+        {limitHit && (
+          <UpgradePrompt
+            reason={limitHit.reason}
+            plan={limitHit.plan}
+            limit={limitHit.limit}
+            onDismiss={() => setLimitHit(null)}
+          />
+        )}
 
         {error && (
           <p role="alert" className="mt-3 text-sm text-danger">

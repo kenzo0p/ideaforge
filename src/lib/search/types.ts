@@ -20,6 +20,14 @@ export interface SearchResult {
 export interface SearchOptions {
   maxResults?: number;
   signal?: AbortSignal;
+  /**
+   * Only return results published in the last N days.
+   *
+   * Monitoring needs this: re-running a research query without a recency window
+   * returns the same canonical pages every week, and "nothing new" would be
+   * indistinguishable from "the filter isn't working".
+   */
+  recentDays?: number;
 }
 
 export interface SearchProvider {

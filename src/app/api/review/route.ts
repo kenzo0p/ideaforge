@@ -1,3 +1,5 @@
+import { track } from "@/lib/db/analytics";
+import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getLayer2 } from "@/lib/insights/layer2";
 import { detectKind, extractDocument } from "@/lib/extract/document";
@@ -15,6 +17,8 @@ export async function POST(req: Request) {
   if (auth instanceof Response) return auth;
   const limited = await enforceRateLimit(auth.id, "copilot");
   if (limited) return limited;
+
+  void track(EVENTS.DECK_REVIEWED, { userId: auth.id });
 
   let form: FormData;
   try {

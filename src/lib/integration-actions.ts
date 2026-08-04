@@ -19,12 +19,15 @@ import {
   refreshGoogleToken,
 } from "@/lib/integrations/google";
 import { isEncryptionConfigured } from "@/lib/integrations/crypto";
+import { canUseFeature } from "@/lib/billing/entitlements";
 
 export interface ExportResult {
   url?: string;
   error?: string;
   /** Set when the user needs to connect the provider first. */
   needsConnect?: Provider;
+  /** Set when the refusal is the plan, so the UI can offer the upgrade. */
+  upgradeTo?: "pro" | "team";
 }
 
 /** What the UI needs to render connect/disconnect state. */
@@ -75,6 +78,9 @@ export async function exportToNotionAction(projectId: string): Promise<ExportRes
   const user = await getCurrentUser();
   if (!user) return { error: "Sign in first." };
 
+  const entitled = await canUseFeature(user.id, "integrations");
+  if (!entitled.allowed) return { error: entitled.reason, upgradeTo: entitled.upgradeTo };
+
   const project = await getProject(projectId, user.id);
   if (!project) return { error: "Project not found." };
 
@@ -104,6 +110,9 @@ export async function exportToNotionAction(projectId: string): Promise<ExportRes
 export async function exportToGoogleDocsAction(projectId: string): Promise<ExportResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Sign in first." };
+
+  const entitled = await canUseFeature(user.id, "integrations");
+  if (!entitled.allowed) return { error: entitled.reason, upgradeTo: entitled.upgradeTo };
 
   const project = await getProject(projectId, user.id);
   if (!project) return { error: "Project not found." };

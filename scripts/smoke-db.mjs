@@ -16,6 +16,7 @@ const t = await import("../src/lib/db/telegram.ts");
 const rl = await import("../src/lib/db/ratelimit.ts");
 const cb = await import("../src/lib/db/collaboration.ts");
 const un = await import("../src/lib/username.ts");
+const w = await import("../src/lib/db/watches.ts");
 
 let failed = 0;
 const eq = (label, actual, expected) => {
@@ -247,6 +248,60 @@ console.log("\n\x1b[1mcollaboration: access control\x1b[0m");
   await p.deleteProject(shared.id, owner.id);
   eq("deleting a project removes its comments", (await cb.listComments(shared.id)).length, 0);
   await u.deleteUser(stranger.id);
+}
+
+console.log("\n\x1b[1mwatches: the new-findings diff\x1b[0m");
+{
+  const wUser = await u.createUser(`watch-${Date.now()}@example.test`, "s:h", "Watcher");
+  const wProj = await p.createProject({ userId: wUser.id, title: "Watched project", idea: "flood alerts" });
+
+  const watch = await w.createWatch({
+    projectId: wProj.id, projectTitle: wProj.title, userId: wUser.id,
+    cadence: "weekly", queries: ["flood alerts", "flood forecasting"],
+  });
+  ok("watch created", !!watch.id);
+  eq("due immediately so the user sees it work", watch.nextRunAt <= Date.now(), true);
+  eq("enabling twice is idempotent", await (async () => {
+    await w.createWatch({ projectId: wProj.id, projectTitle: wProj.title, userId: wUser.id, cadence: "weekly", queries: ["x"] });
+    return (await w.listWatches(wUser.id)).length;
+  })(), 1);
+
+  const mk = (url, title) => ({ watchId: watch.id, projectId: wProj.id, userId: wUser.id, title, url, source: "example.com", kind: "news" });
+
+  const first = await w.recordFindings(watch.id, [mk("https://a.com/1", "One"), mk("https://a.com/2", "Two")]);
+  eq("first cycle reports both", first.length, 2);
+
+  // The whole point: a repeat cycle returning the same URLs must report nothing.
+  const repeat = await w.recordFindings(watch.id, [mk("https://a.com/1", "One"), mk("https://a.com/2", "Two")]);
+  eq("re-seeing the same results reports nothing", repeat.length, 0);
+
+  const mixed = await w.recordFindings(watch.id, [mk("https://a.com/2", "Two"), mk("https://a.com/3", "Three")]);
+  eq("a mixed batch reports only the new one", mixed.length, 1);
+  eq("…and it is the right one", mixed[0]?.url, "https://a.com/3");
+  eq("history holds every unique result", (await w.listFindings(wProj.id, wUser.id)).length, 3);
+
+  await w.bumpUnseen(watch.id, 3);
+  eq("unseen count tracks new findings", (await w.getWatch(wProj.id, wUser.id)).unseenCount, 3);
+  eq("unseen findings surface for the inbox", (await w.listUnseenFindings(wUser.id)).length, 3);
+  await w.markFindingsSeen(wProj.id, wUser.id);
+  eq("marking seen clears the badge", (await w.getWatch(wProj.id, wUser.id)).unseenCount, 0);
+  eq("…and the inbox", (await w.listUnseenFindings(wUser.id)).length, 0);
+
+  // Two watches must not share a dedupe namespace.
+  const other = await p.createProject({ userId: wUser.id, title: "Other", idea: "unrelated" });
+  const w2 = await w.createWatch({ projectId: other.id, projectTitle: other.title, userId: wUser.id, cadence: "weekly", queries: ["q"] });
+  const cross = await w.recordFindings(w2.id, [{ watchId: w2.id, projectId: other.id, userId: wUser.id, title: "One", url: "https://a.com/1", source: "example.com", kind: "news" }]);
+  eq("the same URL is new for a different watch", cross.length, 1);
+
+  eq("due list picks it up", (await w.dueWatches(Date.now())).some(x => x.id === watch.id), true);
+  await w.advanceWatch(watch.id, "weekly");
+  eq("advancing reschedules it out of the queue", (await w.dueWatches(Date.now())).some(x => x.id === watch.id), false);
+
+  await p.deleteProject(wProj.id, wUser.id);
+  eq("deleting a project removes its watch", await w.getWatch(wProj.id, wUser.id), null);
+  eq("…and its findings", (await w.listFindings(wProj.id, wUser.id)).length, 0);
+  await u.deleteUser(wUser.id);
+  eq("deleting an account clears watches", (await w.listWatches(wUser.id)).length, 0);
 }
 
 console.log("\n\x1b[1mgoogle sign-in linking\x1b[0m");

@@ -1,6 +1,7 @@
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider, type SearchResult } from "@/lib/search";
 import { discoverResources } from "@/lib/resources";
+import { relevantToIdea } from "./relevance";
 import { findVideos } from "@/lib/resources/youtube";
 import {
   deepResearchMessages,
@@ -203,7 +204,7 @@ class DefaultLayer2 implements Layer2Service {
           searcher.search(q, { maxResults: 3, signal }).catch(() => [] as SearchResult[]),
         ),
       );
-      const fallback = categorizeResources(relevantTo(idea, dedupeByUrl(batches.flat())));
+      const fallback = categorizeResources(relevantToIdea(idea, dedupeByUrl(batches.flat())));
       if (repos.length === 0) repos = fallback.repos;
       if (datasets.length === 0) datasets = fallback.datasets;
       if (papers.length === 0) papers = fallback.papers;
@@ -425,29 +426,6 @@ class DefaultLayer2 implements Layer2Service {
       demo: searcher.isMock || provider.isMock,
     };
   }
-}
-
-/**
- * Keep only results that share meaningful vocabulary with the idea.
- *
- * A generic query ("… open source github project") reliably returns popular but
- * unrelated repos. Demanding at least one distinctive term in common is a crude
- * filter, but it removes the obviously-wrong links, and showing an empty bucket
- * beats showing a confidently wrong one.
- */
-function relevantTo(idea: string, results: SearchResult[]): SearchResult[] {
-  const terms = new Set(
-    keywordsFor(idea)
-      .split(/\s+/)
-      .filter((w) => w.length > 3),
-  );
-  if (terms.size === 0) return results;
-
-  return results.filter((r) => {
-    const text = `${r.title} ${r.content ?? ""} ${r.url}`.toLowerCase();
-    // Match on stems so "forecast" also catches "forecasting"/"forecasts".
-    return [...terms].some((t) => text.includes(t.slice(0, Math.max(4, t.length - 2))));
-  });
 }
 
 /**

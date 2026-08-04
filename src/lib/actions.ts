@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { canCreateProject } from "@/lib/billing/entitlements";
 import {
   addWorkspaceItem,
   createProject,
@@ -24,6 +25,8 @@ import {
 } from "@/lib/db/telegram";
 import { getBotUsername } from "@/lib/agents/telegram";
 import { createReminder, deleteReminder } from "@/lib/db/reminders";
+import { track } from "@/lib/db/analytics";
+import { EVENTS } from "@/lib/analytics/events";
 
 // Server Actions — the only way client components mutate persisted data.
 // Every action requires an authenticated user and enforces ownership.
@@ -48,7 +51,14 @@ export async function saveProjectAction(
     revalidatePath(`/projects/${input.id}`);
     return { id: input.id };
   }
+  // Only creation is gated — updating an existing project must keep working
+  // even if the account later drops below the limit, or a downgrade would
+  // silently make saved work read-only.
+  const gate = await canCreateProject(userId);
+  if (!gate.allowed) throw new Error(gate.reason ?? "Project limit reached.");
+
   const project = await createProject({ ...input, userId, title });
+  void track(EVENTS.PROJECT_SAVED, { userId, props: { hasResearch: !!input.research, hasPlan: !!input.plan } });
   revalidatePath("/dashboard");
   return { id: project.id };
 }

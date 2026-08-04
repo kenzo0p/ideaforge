@@ -27,6 +27,7 @@ import ReviewPanel from "@/components/ReviewPanel";
 import ComparePanel from "@/components/ComparePanel";
 import { USAGE_EVENT } from "@/components/UsageMeter";
 import { saveProjectAction } from "@/lib/actions";
+import UpgradePrompt, { parseLimitError } from "@/components/UpgradePrompt";
 import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
 
 // Multilingual: BCP-47 locales the copilot can respond in.
@@ -81,6 +82,13 @@ export default function IdeaConsole({
   // Persistence (Part 4)
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
+  // A plan refusal from any stage. Held separately from ordinary errors so a
+  // paywall renders as an offer rather than red text.
+  const [limitHit, setLimitHit] = useState<{
+    reason: string;
+    plan: "pro" | "team";
+    limit: string;
+  } | null>(null);
   const [autosavedAt, setAutosavedAt] = useState<number | null>(null);
   // Mirrors of the state autosave reads, so a save triggered from a callback
   // never captures a stale closure.
@@ -106,6 +114,7 @@ export default function IdeaConsole({
     setPlan(null);
     setPlanError(null);
     setSavedId(null);
+    setLimitHit(null);
     savedIdRef.current = null;
     setAutosavedAt(null);
     setTab("validation"); // a new idea starts back at step one
@@ -127,8 +136,14 @@ export default function IdeaConsole({
         return;
       }
       if (!res.ok || !res.body) {
-        const { error } = await res.json().catch(() => ({ error: "Request failed." }));
-        setOutput(`> ⚠️ ${error ?? "Request failed."}`);
+        const body = await res.json().catch(() => ({ error: "Request failed." }));
+        const limit = parseLimitError(res.status, body);
+        if (limit) {
+          setLimitHit(limit);
+          setStatus("idle");
+          return;
+        }
+        setOutput(`> ⚠️ ${body.error ?? "Request failed."}`);
         setStatus("error");
         return;
       }
@@ -175,8 +190,14 @@ export default function IdeaConsole({
         return;
       }
       if (!res.ok) {
-        const { error } = await res.json().catch(() => ({ error: "Request failed." }));
-        setResearchError(error ?? "DeepSearch failed.");
+        const body = await res.json().catch(() => ({ error: "Request failed." }));
+        const limit = parseLimitError(res.status, body);
+        if (limit) {
+          setLimitHit(limit);
+          setResearch("idle");
+          return;
+        }
+        setResearchError(body.error ?? "DeepSearch failed.");
         setResearch("error");
         return;
       }
@@ -207,8 +228,14 @@ export default function IdeaConsole({
         return;
       }
       if (!res.ok) {
-        const { error } = await res.json().catch(() => ({ error: "Request failed." }));
-        setPlanError(error ?? "Project HUB failed.");
+        const body = await res.json().catch(() => ({ error: "Request failed." }));
+        const limit = parseLimitError(res.status, body);
+        if (limit) {
+          setLimitHit(limit);
+          setPlanStatus("idle");
+          return;
+        }
+        setPlanError(body.error ?? "Project HUB failed.");
         setPlanStatus("error");
         return;
       }
@@ -246,8 +273,14 @@ export default function IdeaConsole({
         setSavedId(id);
         setAutosavedAt(Date.now());
         return id;
-      } catch {
-        return null; // Non-fatal — the next autosave or a manual save retries.
+      } catch (err) {
+        // The project cap surfaces as a thrown action error. Silently swallowing
+        // it meant hitting the limit looked like the Save button was broken.
+        const message = err instanceof Error ? err.message : "";
+        if (!silent && /plan|limit|upgrade/i.test(message)) {
+          setLimitHit({ reason: message, plan: "pro", limit: "projects" });
+        }
+        return null; // Otherwise non-fatal — the next save retries.
       } finally {
         if (!silent) setSaving(false);
       }
@@ -435,6 +468,17 @@ export default function IdeaConsole({
               },
             ]}
           />
+
+          {/* A plan refusal from any stage lands here, above the tabs, where
+              the user is already looking. */}
+          {limitHit && (
+            <UpgradePrompt
+              reason={limitHit.reason}
+              plan={limitHit.plan}
+              limit={limitHit.limit}
+              onDismiss={() => setLimitHit(null)}
+            />
+          )}
 
           {/* --- Validation tab --- */}
           {tab === "validation" && (

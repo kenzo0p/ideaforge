@@ -15,6 +15,8 @@ import Collaborators from "@/components/Collaborators";
 import CommentThread from "@/components/CommentThread";
 import { collaborationStateAction } from "@/lib/collab-actions";
 import { integrationStatusAction } from "@/lib/integration-actions";
+import WatchPanel from "@/components/WatchPanel";
+import { watchStatusAction } from "@/lib/watch-actions";
 import RealtimeRefresh from "@/components/RealtimeRefresh";
 import { getMilestoneProgress, getProject, listWorkspaceItems } from "@/lib/db/projects";
 import { listRemindersForProject, listReminderLogs } from "@/lib/db/reminders";
@@ -53,6 +55,7 @@ export default async function ProjectPage({
   const completedMilestones = await getMilestoneProgress(id);
   const collab = await collaborationStateAction(id);
   const integrationStatus = await integrationStatusAction();
+  const watchState = await watchStatusAction(id);
 
   return (
     <main className="mx-auto w-full max-w-6xl px-5 py-8">
@@ -102,12 +105,22 @@ export default async function ProjectPage({
             <EmptySection label="No validation saved for this project." />
           ))}
 
-        {activeTab === "research" &&
-          (project.research ? (
-            <ResearchPanel report={project.research} searchProvider="Saved" plan={project.plan} />
-          ) : (
-            <EmptySection label="No research saved for this project." />
-          ))}
+        {activeTab === "research" && (
+          <>
+            {/* The monitor sits above the briefing it keeps fresh — someone who
+                has just read stale research is exactly who wants this. */}
+            <WatchPanel
+              projectId={project.id}
+              watch={watchState?.watch ?? null}
+              findings={watchState?.findings ?? []}
+            />
+            {project.research ? (
+              <ResearchPanel report={project.research} searchProvider="Saved" plan={project.plan} />
+            ) : (
+              <EmptySection label="No research saved for this project." />
+            )}
+          </>
+        )}
 
         {activeTab === "plan" &&
           (project.plan ? (

@@ -18,6 +18,7 @@ import {
   PanelLeftOpen,
   Search,
   Settings,
+  CreditCard,
   Sparkles,
   UserPlus,
   X,
@@ -50,6 +51,9 @@ const NAV = [
   { href: "/?mode=discover", label: "Find a problem", icon: Compass, authOnly: true },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, authOnly: true },
   { href: "/notifications", label: "Notifications", icon: Bell, authOnly: true },
+  // Visible signed-out too: someone evaluating the product should be able to
+  // see what it costs without creating an account first.
+  { href: "/pricing", label: "Plans", icon: CreditCard, authOnly: false },
   { href: "/settings", label: "Settings", icon: Settings, authOnly: true },
 ];
 

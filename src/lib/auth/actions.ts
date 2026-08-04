@@ -12,6 +12,8 @@ import { hashPassword, verifyPassword } from "./password";
 import { endSession, startSession } from "./session";
 import { getMailer } from "@/lib/email";
 import { markEmailVerified } from "@/lib/db/users";
+import { track } from "@/lib/db/analytics";
+import { EVENTS } from "@/lib/analytics/events";
 
 export interface AuthState {
   error?: string;
@@ -51,6 +53,7 @@ export async function signUpAction(_prev: AuthState, formData: FormData): Promis
   if (await getUserByEmail(email)) return { error: "An account with that email already exists." };
 
   const user = await createUser(email, hashPassword(password), name);
+  void track(EVENTS.SIGNED_UP, { userId: user.id, props: { method: "password" } });
 
   // With no mail provider configured there is no way to complete verification,
   // so requiring it would lock every new account out. Activate immediately and
@@ -91,6 +94,7 @@ export async function signInAction(_prev: AuthState, formData: FormData): Promis
     };
   }
 
+  void track(EVENTS.SIGNED_IN, { userId: user.id, props: { method: "password" } });
   await startSession(user.id);
   redirect(safeInternalPath(formData.get("next")));
 }

@@ -1,6 +1,8 @@
 import { verifyFirebaseIdToken } from "@/lib/auth/firebase";
 import { upsertGoogleUser } from "@/lib/db/users";
 import { startSession } from "@/lib/auth/session";
+import { track } from "@/lib/db/analytics";
+import { EVENTS } from "@/lib/analytics/events";
 
 export const runtime = "nodejs";
 
@@ -44,6 +46,7 @@ export async function POST(req: Request) {
 
   try {
     const user = await upsertGoogleUser(identity);
+    void track(EVENTS.SIGNED_IN, { userId: user.id, props: { method: "google" } });
     await startSession(user.id);
     return Response.json({ ok: true, email: user.email });
   } catch (err) {

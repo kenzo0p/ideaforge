@@ -319,6 +319,8 @@ export async function deleteProject(id: string, userId: string): Promise<void> {
     (await col("reminderLogs")).deleteMany({ projectId: id, userId }),
     (await col("projectInvites")).deleteMany({ projectId: id }),
     (await col("projectComments")).deleteMany({ projectId: id }),
+    (await col("watches")).deleteMany({ projectId: id }),
+    (await col("watchFindings")).deleteMany({ projectId: id }),
   ]);
 }
 

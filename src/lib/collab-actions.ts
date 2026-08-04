@@ -15,7 +15,10 @@ import {
 import { addMember, getProject, isProjectOwner, listMembers, removeMember } from "@/lib/db/projects";
 import { getUserByUsername, searchUsers } from "@/lib/db/users";
 import { normalizeUsername, validateUsername } from "@/lib/username";
+import { canAddCollaborator, canUseFeature } from "@/lib/billing/entitlements";
 import { publish } from "@/lib/realtime";
+import { track } from "@/lib/db/analytics";
+import { EVENTS } from "@/lib/analytics/events";
 
 // ---------------------------------------------------------------------------
 // Collaboration server actions.
@@ -29,6 +32,8 @@ import { publish } from "@/lib/realtime";
 export interface CollabState {
   error?: string;
   ok?: boolean;
+  /** Set when the refusal is a plan limit, so the UI can offer an upgrade. */
+  upgradeTo?: "pro" | "team";
 }
 
 async function requireOwner(projectId: string) {
@@ -63,6 +68,12 @@ export async function inviteCollaboratorAction(
   if (invalid) return { error: invalid };
   if (handle === user.username) return { error: "That's you — you already own this." };
 
+  // Checked before the username lookup: someone on a plan without collaboration
+  // shouldn't have to guess a real teammate's handle to find that out. The seat
+  // count below still runs for plans that do have the feature.
+  const feature = await canUseFeature(user.id, "collaboration");
+  if (!feature.allowed) return { error: feature.reason, upgradeTo: feature.upgradeTo };
+
   const target = await getUserByUsername(handle);
   if (!target) return { error: `No one here goes by @${handle}.` };
 
@@ -73,6 +84,12 @@ export async function inviteCollaboratorAction(
   if (roster?.members.some((m) => m.userId === target.id)) {
     return { error: "They're already on this project." };
   }
+
+  // Seat check counts pending invitations too, so someone can't exceed the cap
+  // by sending five invitations before any is accepted.
+  const pending = (await listInvites(projectId)).length;
+  const seats = await canAddCollaborator(user.id, (roster?.members.length ?? 0) + pending);
+  if (!seats.allowed) return { error: seats.reason, upgradeTo: seats.upgradeTo };
 
   await createInvite({
     projectId,
@@ -85,6 +102,7 @@ export async function inviteCollaboratorAction(
   });
 
   // Nudge their open tabs so the invitation shows up without a refresh.
+  void track(EVENTS.COLLABORATOR_INVITED, { userId: user.id });
   publish(`user:${target.id}`, { type: "invite" });
   revalidatePath(`/projects/${projectId}`);
   return { ok: true };
@@ -118,6 +136,7 @@ export async function acceptInviteAction(inviteId: string): Promise<CollabState>
     name: user.name,
     joinedAt: Date.now(),
   });
+  void track(EVENTS.INVITE_ACCEPTED, { userId: user.id });
   publish(`project:${invite.projectId}`, { type: "members" });
   revalidatePath("/notifications");
   revalidatePath("/dashboard");

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { KeyRound, Plug, Send, Settings as SettingsIcon, ShieldAlert, User } from "lucide-react";
+import { CreditCard, KeyRound, Plug, Send, Settings as SettingsIcon, ShieldAlert, User } from "lucide-react";
 import ConnectTelegram from "@/components/ConnectTelegram";
 import {
   DeleteAccountForm,
@@ -11,6 +11,8 @@ import { isTelegramLinked } from "@/lib/db/telegram";
 import { isTelegramConfigured } from "@/lib/agents/telegram";
 import IntegrationSettings from "@/components/IntegrationSettings";
 import { integrationStatusAction } from "@/lib/integration-actions";
+import BillingSettings from "@/components/BillingSettings";
+import { billingStatusAction } from "@/lib/billing-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,7 @@ export default async function SettingsPage() {
   const telegramConfigured = isTelegramConfigured();
   const telegramLinked = telegramConfigured && await isTelegramLinked(user.id);
   const integrations = await integrationStatusAction();
+  const billing = await billingStatusAction();
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-10">
@@ -34,6 +37,12 @@ export default async function SettingsPage() {
         <Card icon={<User className="size-4 text-brand" />} title="Profile">
           <ProfileForm name={user.name} locale={user.locale} email={user.email} username={user.username} />
         </Card>
+
+        {billing && (
+          <Card icon={<CreditCard className="size-4 text-brand" />} title="Plan & billing">
+            <BillingSettings status={billing} />
+          </Card>
+        )}
 
         <Card icon={<Plug className="size-4 text-brand" />} title="Connected apps">
           <IntegrationSettings

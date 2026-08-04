@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import UpgradePrompt from "@/components/UpgradePrompt";
 import { useState as useReactState, useTransition } from "react";
 import {
   Check,
@@ -36,6 +37,7 @@ export default function ExportMenu({
   const [busy, setBusy] = useReactState<"notion" | "google" | null>(null);
   const [sent, setSent] = useReactState<{ url: string; label: string } | null>(null);
   const [error, setError] = useReactState<string | null>(null);
+  const [upgrade, setUpgrade] = useReactState<"pro" | "team" | null>(null);
   const [, startExport] = useTransition();
 
   /**
@@ -47,18 +49,23 @@ export default function ExportMenu({
   function pushTo(provider: "notion" | "google") {
     setBusy(provider);
     setError(null);
+    setUpgrade(null);
     setSent(null);
     startExport(async () => {
       const run = provider === "notion" ? exportToNotionAction : exportToGoogleDocsAction;
       const res = await run(projectId);
       setBusy(null);
       if (res.needsConnect) {
-        window.location.href = `/api/integrations/connect?provider=${res.needsConnect}&next=${encodeURIComponent(
+        window.location.assign(`/api/integrations/connect?provider=${res.needsConnect}&next=${encodeURIComponent(
           window.location.pathname + window.location.search,
-        )}`;
+        )}`);
         return;
       }
-      if (res.error) return setError(res.error);
+      if (res.error) {
+        // A plan refusal is the one error worth turning into an offer.
+        setUpgrade(res.upgradeTo ?? null);
+        return setError(res.error);
+      }
       if (res.url) setSent({ url: res.url, label: provider === "notion" ? "Notion" : "Google Docs" });
     });
   }
@@ -92,7 +99,7 @@ export default function ExportMenu({
       }, 1400);
     } catch {
       // Clipboard can be blocked by permissions; fall back to the file.
-      window.location.href = `/projects/${projectId}/export`;
+      window.location.assign(`/projects/${projectId}/export`);
     }
   }
 
@@ -198,7 +205,10 @@ export default function ExportMenu({
               <ExternalLink className="size-3.5 shrink-0" />
             </a>
           )}
-          {error && (
+          {error && upgrade && (
+            <UpgradePrompt reason={error} plan={upgrade} limit="integrations" compact />
+          )}
+          {error && !upgrade && (
             <p role="alert" className="m-1 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
               {error}
             </p>

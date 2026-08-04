@@ -1,3 +1,5 @@
+import { track } from "@/lib/db/analytics";
+import { EVENTS } from "@/lib/analytics/events";
 import { getCurrentUser } from "./session";
 import { checkRateLimit, getUsage } from "@/lib/db/ratelimit";
 import type { User } from "@/lib/db/users";
@@ -38,11 +40,22 @@ export const LIMITS: Record<string, { limit: number; windowMs: number }> = {
   agent: { limit: 40, windowMs: 60_000 },
 };
 
-/** Daily ceilings — the cost cap. Tune per tier, or via env for a demo. */
+/**
+ * Daily ceilings — the cost cap, and the main thing a paid plan buys.
+ *
+ * The copilot number comes from the user's plan so upgrading actually lifts the
+ * limit. Agent chat is far cheaper and stays flat.
+ */
 export const DAILY_LIMITS: Record<string, number> = {
-  copilot: Number(process.env.DAILY_COPILOT_LIMIT ?? 60),
+  copilot: Number(process.env.DAILY_COPILOT_LIMIT ?? 15),
   agent: Number(process.env.DAILY_AGENT_LIMIT ?? 200),
 };
+
+async function dailyLimitFor(userId: string, kind: keyof typeof LIMITS): Promise<number> {
+  if (kind !== "copilot") return DAILY_LIMITS[kind];
+  const { dailyRunLimit } = await import("@/lib/billing/entitlements");
+  return dailyRunLimit(userId);
+}
 
 export interface QuotaSnapshot {
   /** Burst window. */
@@ -66,13 +79,18 @@ export async function enforceRateLimit(
   userId: string,
   kind: keyof typeof LIMITS,
 ): Promise<Response | null> {
-  const daily = await checkRateLimit(userId, `${kind}:day`, DAILY_LIMITS[kind], DAY_MS);
+  const dailyCap = await dailyLimitFor(userId, kind);
+  const daily = await checkRateLimit(userId, `${kind}:day`, dailyCap, DAY_MS);
   if (!daily.ok) {
+    // The most commercially useful event in the app: which ceiling people
+    // actually reach is what tells you what to price and what to raise.
+    void track(EVENTS.LIMIT_HIT, { userId, props: { limit: `${kind}_daily`, cap: dailyCap } });
     const hours = Math.ceil(daily.retryAfterSec / 3600);
     return Response.json(
       {
-        error: `Daily limit reached (${DAILY_LIMITS[kind]} copilot runs). Resets in about ${hours}h.`,
+        error: `Daily limit reached (${dailyCap} runs). Resets in about ${hours}h — or upgrade for a higher cap.`,
         quota: "daily",
+        upgrade: true,
       },
       { status: 429, headers: { "Retry-After": String(daily.retryAfterSec) } },
     );
@@ -95,9 +113,10 @@ export async function quotaSnapshot(
   kind: keyof typeof LIMITS = "copilot",
 ): Promise<QuotaSnapshot> {
   const { limit, windowMs } = LIMITS[kind];
+  const cap = await dailyLimitFor(userId, kind);
   const [burst, daily] = await Promise.all([
     getUsage(userId, kind, limit, windowMs),
-    getUsage(userId, `${kind}:day`, DAILY_LIMITS[kind], DAY_MS),
+    getUsage(userId, `${kind}:day`, cap, DAY_MS),
   ]);
   return {
     used: burst.used,

@@ -191,6 +191,9 @@ export async function deleteUser(userId: string): Promise<void> {
     "projectComments",
     "integrations",
     "oauthStates",
+    "watches",
+    "watchFindings",
+    "analyticsEvents",
   ];
   await Promise.all(
     owned.map(async (name) => (await col(name)).deleteMany({ userId })),

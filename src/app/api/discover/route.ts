@@ -1,3 +1,5 @@
+import { track } from "@/lib/db/analytics";
+import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider } from "@/lib/search";
 import { getLayer2 } from "@/lib/insights/layer2";
@@ -13,6 +15,8 @@ export async function POST(req: Request) {
   if (auth instanceof Response) return auth;
   const limited = await enforceRateLimit(auth.id, "copilot");
   if (limited) return limited;
+
+  void track(EVENTS.PROBLEM_DISCOVERED, { userId: auth.id });
 
   let body: { domain?: string; locale?: string };
   try {

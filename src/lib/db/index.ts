@@ -215,6 +215,19 @@ async function ensureIndexes(db: Db): Promise<void> {
 
     db.collection("projectComments").createIndex({ projectId: 1, createdAt: 1 }),
 
+    db.collection("analyticsEvents").createIndex({ name: 1, createdAt: -1 }),
+    db.collection("analyticsEvents").createIndex({ day: 1 }),
+    // Raw events are disposable; the aggregates are the lasting artefact.
+    db.collection("analyticsEvents").createIndex({ expiresAt: 1 }, ttl),
+
+    db.collection("watches").createIndex({ active: 1, nextRunAt: 1 }),
+    db.collection("watches").createIndex({ userId: 1 }),
+    // The whole "what's new?" diff rests on this: a repeat result collides and
+    // is rejected, so only genuinely new URLs are ever inserted.
+    db.collection("watchFindings").createIndex({ watchId: 1, url: 1 }, { unique: true }),
+    db.collection("watchFindings").createIndex({ userId: 1, seen: 1, foundAt: -1 }),
+    db.collection("watchFindings").createIndex({ projectId: 1, foundAt: -1 }),
+
     db.collection("integrations").createIndex({ userId: 1 }),
     // OAuth state is short-lived by design; let Mongo reap it.
     db.collection("oauthStates").createIndex({ expiresAt: 1 }, ttl),

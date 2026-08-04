@@ -29,6 +29,11 @@ export class TavilyProvider implements SearchProvider {
         search_depth: "advanced",
         max_results: options.maxResults ?? 5,
         include_answer: false,
+        // Tavily's `days` filter only applies to the news topic; asking for a
+        // recency window implies we want fresh items, not canonical pages.
+        ...(options.recentDays
+          ? { topic: "news", days: Math.min(options.recentDays, 365) }
+          : {}),
       }),
     });
 

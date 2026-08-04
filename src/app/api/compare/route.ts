@@ -1,6 +1,9 @@
+import { track } from "@/lib/db/analytics";
+import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getLayer2 } from "@/lib/insights/layer2";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
+import { canUseFeature } from "@/lib/billing/entitlements";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,8 +15,18 @@ const MAX_IDEAS = 3;
 export async function POST(req: Request) {
   const auth = await requireApiUser();
   if (auth instanceof Response) return auth;
+  const entitled = await canUseFeature(auth.id, "compare");
+  if (!entitled.allowed) {
+    return Response.json(
+      { error: entitled.reason, upgradeTo: entitled.upgradeTo, quota: "feature_compare" },
+      { status: 402 },
+    );
+  }
+
   const limited = await enforceRateLimit(auth.id, "copilot");
   if (limited) return limited;
+
+  void track(EVENTS.IDEAS_COMPARED, { userId: auth.id });
 
   let body: { ideas?: unknown; locale?: string };
   try {

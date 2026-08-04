@@ -10,6 +10,7 @@ import {
 } from "@/lib/collab-actions";
 import type { ProjectMember } from "@/lib/db/projects";
 import type { ProjectInvite } from "@/lib/db/collaboration";
+import UpgradePrompt from "@/components/UpgradePrompt";
 
 function Avatar({ label }: { label: string }) {
   return (
@@ -46,6 +47,7 @@ export default function Collaborators({
   const [matches, setMatches] = useState<{ username: string; name: string | null }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  const [upgrade, setUpgrade] = useState<{ reason: string; plan: "pro" | "team" } | null>(null);
   const [pending, start] = useTransition();
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -79,8 +81,13 @@ export default function Collaborators({
     setError(null);
     setSent(null);
     setMatches([]);
+    setUpgrade(null);
     start(async () => {
       const res = await inviteCollaboratorAction(projectId, target);
+      // A seat limit is an offer, not an error.
+      if (res.error && res.upgradeTo) {
+        return setUpgrade({ reason: res.error, plan: res.upgradeTo });
+      }
       if (res.error) return setError(res.error);
       setQuery("");
       setSent(target);
@@ -206,8 +213,16 @@ export default function Collaborators({
               {error}
             </p>
           )}
-          {sent && !error && (
+          {sent && !error && !upgrade && (
             <p className="mt-2 text-sm text-success">Invitation sent to @{sent}.</p>
+          )}
+          {upgrade && (
+            <UpgradePrompt
+              reason={upgrade.reason}
+              plan={upgrade.plan}
+              limit="collaborators"
+              compact
+            />
           )}
         </div>
       )}
