@@ -444,6 +444,46 @@ console.log("\n\x1b[1morganisations\x1b[0m");
   eq("its rival goes with its last member", await o.getOrg(rival.id), null);
 }
 
+console.log("\n\x1b[1mpublic listing\x1b[0m");
+{
+  const owner = await u.createUser(`pub-${Date.now()}@example.test`, "salt:hash", "Publisher");
+  const other = await u.createUser(`oth-${Date.now()}@example.test`, "salt:hash", "Other");
+
+  const draft = await p.createProject({ userId: owner.id, title: "Draft", idea: "Half an idea" });
+  eq("a new project is unlisted", draft.listed, false);
+
+  // Listing is gated twice: the brief must be shared, and it must have content.
+  eq("cannot list an unshared project", await p.setListed(draft.id, owner.id, true), false);
+  const token = await p.enableShare(draft.id, owner.id);
+  ok("sharing mints a token", !!token);
+  eq("cannot list a project with no validation", await p.setListed(draft.id, owner.id, true), false);
+
+  await p.updateProjectArtifacts(draft.id, owner.id, {
+    userId: owner.id,
+    title: "Draft",
+    idea: "Half an idea",
+    validationMarkdown: "## Verdict\n\nWorth building.",
+  });
+  eq("a shared, validated brief can be listed", await p.setListed(draft.id, owner.id, true), true);
+  eq("and reads back as listed", (await p.getProject(draft.id, owner.id))?.listed, true);
+
+  const directory = await p.listPublicBriefs();
+  ok("it appears in the directory", directory.some((b) => b.token === token));
+
+  // Someone else's project is not theirs to publish.
+  eq("a stranger cannot list it", await p.setListed(draft.id, other.id, true), false);
+
+  // Revoking the link must take the listing with it, or the sitemap advertises
+  // a URL that 404s.
+  await p.disableShare(draft.id, owner.id);
+  eq("revoking the link delists it", (await p.getProject(draft.id, owner.id))?.listed, false);
+  const after = await p.listPublicBriefs();
+  ok("and drops it from the directory", !after.some((b) => b.token === token));
+
+  await u.deleteUser(owner.id);
+  await u.deleteUser(other.id);
+}
+
 console.log("\n\x1b[1mcascade on delete (no foreign keys in Mongo)\x1b[0m");
 await u.deleteUser(user.id);
 const client = new MongoClient(process.env.MONGODB_URI);

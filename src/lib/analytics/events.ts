@@ -25,6 +25,10 @@ export const EVENTS = {
   DECK_REVIEWED: "deck_reviewed",
   PROBLEM_DISCOVERED: "problem_discovered",
   PROJECT_EXPORTED: "project_exported",
+  // Acquisition: a listed brief is a page that can be found by someone who has
+  // never heard of the product, which nothing else in the funnel produces.
+  BRIEF_LISTED: "brief_listed",
+  PUBLIC_BRIEF_VIEWED: "public_brief_viewed",
   COLLABORATOR_INVITED: "collaborator_invited",
   INVITE_ACCEPTED: "invite_accepted",
 

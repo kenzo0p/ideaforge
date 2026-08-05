@@ -9,6 +9,7 @@ import {
   deleteWorkspaceItem,
   disableShare,
   enableShare,
+  setListed,
   getProject,
   setMilestoneDone,
   updateProjectArtifacts,
@@ -133,6 +134,31 @@ export async function disableShareAction(projectId: string): Promise<void> {
   const userId = await requireUserId();
   await disableShare(projectId, userId);
   revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/explore");
+}
+
+/**
+ * Opt a shared brief into search engines and the public directory.
+ *
+ * Separate from sharing on purpose — see `setListed`. The refusal case is real:
+ * you can't list a project that isn't shared or has no validation yet.
+ */
+export async function setListedAction(
+  projectId: string,
+  listed: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireUserId();
+  const done = await setListed(projectId, userId, listed);
+  if (!done) {
+    return {
+      ok: false,
+      error: "Share the project and validate the idea first — there's nothing to publish yet.",
+    };
+  }
+  if (listed) void track(EVENTS.BRIEF_LISTED, { userId });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/explore");
+  return { ok: true };
 }
 
 // --- Milestone progress ----------------------------------------------------

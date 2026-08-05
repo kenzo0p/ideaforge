@@ -8,6 +8,7 @@ import {
   Bot,
   Building2,
   Compass,
+  Lightbulb,
   FileText,
   FolderKanban,
   Rocket,
@@ -49,7 +50,9 @@ const PROJECT_SECTIONS = [
 
 const NAV = [
   { href: "/", label: "New idea", icon: Sparkles, authOnly: false },
-  { href: "/?mode=discover", label: "Find a problem", icon: Compass, authOnly: true },
+  { href: "/?mode=discover", label: "Find a problem", icon: Lightbulb, authOnly: true },
+  // Visible signed-out: this is where search traffic lands and browses.
+  { href: "/explore", label: "Explore", icon: Compass, authOnly: false },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, authOnly: true },
   { href: "/notifications", label: "Notifications", icon: Bell, authOnly: true },
   // Visible signed-out too: someone evaluating the product should be able to

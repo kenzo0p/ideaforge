@@ -72,6 +72,10 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   workspace's projects without being invited to each one. Domain claims are checked against the
   claimant's own address and public mailbox providers can never be claimed, which is what stops
   a domain claim from being a way to adopt strangers.
+- **Public briefs** — a shared brief is unlisted by default; its owner can separately
+  list it, which adds it to `/explore`, the sitemap, and search indexes. Everything else is
+  `noindex` and the signed-in surface is disallowed by prefix in `robots.txt`, so a new
+  private route is private without anyone remembering to add it.
 - **Multilingual** — an 8-language selector threads a BCP-47 `locale` through every prompt, so a
   live model responds in the chosen language across validation, research, plan, and the agent.
 

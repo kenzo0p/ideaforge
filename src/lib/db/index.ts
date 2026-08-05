@@ -215,6 +215,12 @@ async function ensureIndexes(db: Db): Promise<void> {
 
     db.collection("projectComments").createIndex({ projectId: 1, createdAt: 1 }),
 
+    // The public directory and the sitemap read exactly this.
+    db.collection("projects").createIndex(
+      { listed: 1, listedAt: -1 },
+      { partialFilterExpression: { listed: true } },
+    ),
+
     db.collection("analyticsEvents").createIndex({ name: 1, createdAt: -1 }),
     db.collection("analyticsEvents").createIndex({ day: 1 }),
     // Raw events are disposable; the aggregates are the lasting artefact.

@@ -156,7 +156,11 @@ export default async function ProjectPage({
             {/* Sharing is the owner's call — a collaborator shouldn't be able to
                 publish someone else's project to the open web. */}
             {collab?.isOwner && (
-              <ShareProject projectId={project.id} initialToken={project.shareToken} />
+              <ShareProject
+                projectId={project.id}
+                initialToken={project.shareToken}
+                initialListed={project.listed}
+              />
             )}
             <AgentConsole projectId={project.id} />
             {telegramConfigured && <ConnectTelegram linked={telegramLinked} />}

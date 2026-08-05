@@ -37,6 +37,9 @@ export interface Project {
   plan: ProjectPlan | null;
   /** Public read-only share token, or null when not shared. */
   shareToken: string | null;
+  /** Opted in to search engines and the public directory. */
+  listed: boolean;
+  listedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -100,6 +103,8 @@ interface ProjectDoc {
   research: ResearchReport | null;
   plan: ProjectPlan | null;
   shareToken?: string;
+  listed?: boolean;
+  listedAt?: number;
   milestones: MilestoneDoc[];
   workspaceItems: WorkspaceItemDoc[];
   createdAt: number;
@@ -130,6 +135,8 @@ function toProject(d: ProjectDoc): Project {
     research: d.research ?? null,
     plan: d.plan ?? null,
     shareToken: d.shareToken ?? null,
+    listed: d.listed === true,
+    listedAt: d.listedAt ?? null,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
   };
@@ -363,7 +370,86 @@ export async function enableShare(id: string, userId: string): Promise<string | 
 export async function disableShare(id: string, userId: string): Promise<void> {
   // $unset rather than null: the unique index on shareToken is sparse, and a
   // stored null would collide with every other unshared project.
-  await (await projects()).updateOne({ _id: id, userId }, { $unset: { shareToken: "" } });
+  // Delisting comes with it — a public listing whose link no longer resolves
+  // would leave a dead entry in the sitemap and a 404 in someone's search
+  // results.
+  await (await projects()).updateOne(
+    { _id: id, userId },
+    { $unset: { shareToken: "", listedAt: "" }, $set: { listed: false } },
+  );
+}
+
+// --- Public directory ------------------------------------------------------
+
+/**
+ * Opt a shared brief into search engines and the public directory.
+ *
+ * Deliberately a second decision, not a side effect of sharing. A share link is
+ * unlisted by design — people send them to a professor or a teammate — and
+ * quietly making those pages indexable would publish someone's unlaunched idea
+ * to Google without them ever agreeing to it.
+ *
+ * Returns false when there's nothing worth listing: a public directory of empty
+ * stubs is worse for the product than an empty one.
+ */
+export async function setListed(
+  id: string,
+  userId: string,
+  listed: boolean,
+): Promise<boolean> {
+  const project = await getProject(id, userId);
+  if (!project) return false;
+  if (listed && (!project.shareToken || !project.validationMarkdown)) return false;
+
+  await (await projects()).updateOne(
+    { _id: id, userId },
+    listed
+      ? { $set: { listed: true, listedAt: Date.now() } }
+      : { $set: { listed: false }, $unset: { listedAt: "" } },
+  );
+  return true;
+}
+
+export interface PublicBrief {
+  token: string;
+  title: string;
+  idea: string;
+  hasResearch: boolean;
+  hasPlan: boolean;
+  listedAt: number;
+  updatedAt: number;
+}
+
+/** Everything in the public directory, newest listing first. */
+export async function listPublicBriefs(limit = 60): Promise<PublicBrief[]> {
+  const rows = await (await projects())
+    .find(
+      { listed: true, shareToken: { $exists: true } },
+      {
+        projection: {
+          title: 1,
+          idea: 1,
+          shareToken: 1,
+          listedAt: 1,
+          updatedAt: 1,
+          plan: 1,
+          research: 1,
+        },
+      },
+    )
+    .sort({ listedAt: -1 })
+    .limit(limit)
+    .toArray();
+
+  return rows.map((d) => ({
+    token: d.shareToken!,
+    title: d.title,
+    idea: d.idea,
+    hasResearch: d.research != null,
+    hasPlan: d.plan != null,
+    listedAt: d.listedAt ?? d.updatedAt,
+    updatedAt: d.updatedAt,
+  }));
 }
 
 /** Look up a shared project by its public token (no auth — read-only view). */

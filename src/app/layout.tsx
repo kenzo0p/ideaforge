@@ -18,6 +18,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Relative OG and canonical URLs need a base to resolve against. Reading the
+  // deployment's own URL means link previews are right on Render, on a custom
+  // domain, and locally, without a hard-coded host to forget about.
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ??
+      (process.env.RENDER_EXTERNAL_URL ?? "http://localhost:3005"),
+  ),
   title: "IdeaForge — Search Less. Solve More.",
   description:
     "An AI research & innovation copilot that turns a one-line idea into a validated, buildable project. Powered by iNSIGHTS Layer 2.",
