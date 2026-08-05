@@ -1,3 +1,4 @@
+import { classifyFailure } from "@/lib/health/failures";
 import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
@@ -41,8 +42,12 @@ export async function POST(req: Request) {
           controller.enqueue(encoder.encode(chunk));
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Analysis failed.";
-        controller.enqueue(encoder.encode(`\n\n> ⚠️ ${message}`));
+        // Never the provider's own words. This used to stream the raw upstream
+        // body into the page, which showed every user our vendor's name, our
+        // billing state and a request id when a key ran out of credit.
+        const { userMessage, detail, kind } = classifyFailure(err);
+        console.error(`analyze failed (${kind}):`, detail.slice(0, 300));
+        controller.enqueue(encoder.encode(`\n\n> ⚠️ ${userMessage}`));
       } finally {
         controller.close();
       }

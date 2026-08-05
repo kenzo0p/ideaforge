@@ -1,6 +1,7 @@
 import { MockSearchProvider } from "./mock";
 import { TavilyProvider } from "./tavily";
 import type { SearchProvider } from "./types";
+import { instrumentSearch } from "@/lib/health/instrument";
 
 export type { SearchProvider, SearchResult, SearchOptions } from "./types";
 export { hostnameOf } from "./types";
@@ -22,5 +23,6 @@ export function getSearchProvider(): SearchProvider {
   else if (tavilyKey) cached = new TavilyProvider(tavilyKey);
   else cached = new MockSearchProvider();
 
+  cached = instrumentSearch(cached);
   return cached;
 }

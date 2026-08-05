@@ -18,6 +18,8 @@ const cb = await import("../src/lib/db/collaboration.ts");
 const un = await import("../src/lib/username.ts");
 const w = await import("../src/lib/db/watches.ts");
 const o = await import("../src/lib/db/orgs.ts");
+const fail = await import("../src/lib/health/failures.ts");
+const health = await import("../src/lib/health/status.ts");
 const ent2 = await import("../src/lib/billing/resolve.ts");
 const dom = await import("../src/lib/orgs/domains.ts");
 const ent = await import("../src/lib/billing/plans.ts");
@@ -482,6 +484,71 @@ console.log("\n\x1b[1mpublic listing\x1b[0m");
 
   await u.deleteUser(owner.id);
   await u.deleteUser(other.id);
+}
+
+console.log("\n\x1b[1mdependency health\x1b[0m");
+{
+  // Classification decides what a user is told and whether anyone is alerted,
+  // so it is checked against the real messages these providers actually send.
+  const credit = fail.classifyFailure(new Error('Anthropic request failed (400): {"message":"Your credit balance is too low to access the Anthropic API."}'));
+  eq("no credit is an outage", credit.kind, "outage");
+  eq("and will not fix itself", credit.selfHealing, false);
+  ok("the user is told nothing about the vendor", !/anthropic|credit|balance/i.test(credit.userMessage));
+  ok("but the operator gets the whole message", credit.detail.includes("credit balance"));
+
+  // The literal strings these providers send, not paraphrases of them.
+  eq("a bad key is an outage", fail.classifyFailure(new Error("invalid x-api-key")).kind, "outage");
+  eq("an OpenAI bad key is too",
+     fail.classifyFailure(new Error("Incorrect API key provided; authentication failed")).kind, "outage");
+  eq("an expired key is too", fail.classifyFailure(new Error("api_key_expired")).kind, "outage");
+  eq("401 is an outage", fail.classifyFailure(new Error("HTTP 401 unauthorized")).kind, "outage");
+
+  const limited = fail.classifyFailure(new Error("HTTP 429 rate_limit_error"));
+  eq("a rate limit is not an outage", limited.kind, "rate_limit");
+  eq("and does fix itself", limited.selfHealing, true);
+  // The ordering trap: an overloaded provider whose body also mentions billing
+  // must not page anyone.
+  eq("429 wins over a billing word in the same body",
+     fail.classifyFailure(new Error("429 too many requests — check your billing")).kind, "rate_limit");
+
+  eq("a dropped socket is transient", fail.classifyFailure(new Error("fetch failed")).kind, "transient");
+  eq("a timeout is transient", fail.classifyFailure(new Error("ETIMEDOUT")).kind, "transient");
+  eq("an unrecognised error is our bug", fail.classifyFailure(new Error("Cannot read x of undefined")).kind, "bad_request");
+
+  // The registry.
+  health.resetHealth();
+  eq("starts unknown", health.getHealth("ai").status, "unknown");
+  eq("and unknown reads as ok publicly", health.publicHealth().checks.ai, "ok");
+
+  // One failure is noise, three is a pattern.
+  health.recordFailure("ai", new Error("fetch failed"));
+  eq("one transient failure is not degradation", health.getHealth("ai").status, "unknown");
+  health.recordFailure("ai", new Error("fetch failed"));
+  health.recordFailure("ai", new Error("fetch failed"));
+  eq("three in a row is", health.getHealth("ai").status, "degraded");
+  ok("and it records when it started", !!health.getHealth("ai").degradedSince);
+  eq("which shows in the public shape", health.publicHealth().status, "degraded");
+
+  health.recordSuccess("ai");
+  eq("one success clears it", health.getHealth("ai").status, "healthy");
+  eq("and resets the counter", health.getHealth("ai").consecutiveFailures, 0);
+
+  // An outage skips the threshold: waiting for two more users to hit a billing
+  // failure before admitting it helps nobody.
+  health.resetHealth();
+  health.recordFailure("ai", new Error("Your credit balance is too low"));
+  eq("an outage degrades on the first failure", health.getHealth("ai").status, "degraded");
+
+  // The public shape must never carry provider detail.
+  const pub = JSON.stringify(health.publicHealth());
+  ok("the public health payload leaks nothing", !/credit|balance|anthropic|error/i.test(pub));
+
+  // Dependencies are tracked apart — search being down must not blame the model.
+  health.resetHealth();
+  health.recordFailure("search", new Error("Your credit balance is too low"));
+  eq("search degrades alone", health.getHealth("search").status, "degraded");
+  eq("and the model is untouched", health.getHealth("ai").status, "unknown");
+  health.resetHealth();
 }
 
 console.log("\n\x1b[1mcascade on delete (no foreign keys in Mongo)\x1b[0m");

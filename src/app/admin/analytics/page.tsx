@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { BarChart3, TrendingDown, TrendingUp } from "lucide-react";
+import { Activity, BarChart3, TrendingDown, TrendingUp } from "lucide-react";
+import { timeAgo } from "@/lib/format";
 import { isAdmin } from "@/lib/analytics/admin";
 import {
   activationFunnel,
@@ -11,6 +12,7 @@ import {
   type FunnelStep,
 } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
+import { allHealth } from "@/lib/health/status";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +77,10 @@ export default async function AnalyticsPage() {
   ]);
 
   const peakDau = Math.max(1, ...dau.map((d) => d.users));
+  // In-process, so this is *this instance's* view. Said plainly below rather
+  // than dressed up as a global status, which it isn't.
+  const health = allHealth();
+  const anyDegraded = health.some((h) => h.status === "degraded");
 
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-10">
@@ -86,6 +92,50 @@ export default async function AnalyticsPage() {
         Last 30 days. Counts are distinct users, not events — one person validating ten ideas is
         one activated user.
       </p>
+
+      <section
+        className={`mb-4 rounded-2xl border p-5 ${
+          anyDegraded ? "border-danger/40 bg-danger/5" : "border-border bg-card"
+        }`}
+      >
+        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+          <Activity className="size-4 text-brand" />
+          Dependencies
+        </h2>
+        <p className="mb-3 text-xs text-muted">
+          This instance only, since boot. Not shared across replicas — an instance whose
+          network is broken should be able to say so while its neighbours are fine.
+        </p>
+        <ul className="space-y-2">
+          {health.map((h) => (
+            <li key={h.id} className="flex flex-wrap items-baseline gap-2 text-sm">
+              <span
+                className={`inline-flex min-w-16 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
+                  h.status === "degraded"
+                    ? "bg-danger/15 text-danger"
+                    : h.status === "healthy"
+                      ? "bg-success/15 text-success"
+                      : "bg-surface text-muted"
+                }`}
+              >
+                {h.status}
+              </span>
+              <span className="font-medium">{h.id}</span>
+              {h.degradedSince && (
+                <span className="text-xs text-muted">for {timeAgo(h.degradedSince).replace(" ago", "")}</span>
+              )}
+              {h.lastOkAt && h.status !== "degraded" && (
+                <span className="text-xs text-muted">last ok {timeAgo(h.lastOkAt)}</span>
+              )}
+              {h.lastError && (
+                <span className="w-full break-words font-mono text-[11px] text-muted">
+                  {h.lastError.kind}: {h.lastError.detail.slice(0, 240)}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card

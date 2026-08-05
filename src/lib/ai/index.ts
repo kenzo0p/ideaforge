@@ -2,6 +2,7 @@ import { AnthropicProvider } from "./anthropic";
 import { MockProvider } from "./mock";
 import { OpenAIProvider } from "./openai";
 import type { AIProvider } from "./types";
+import { instrumentAI } from "@/lib/health/instrument";
 
 export type { AIProvider, ChatMessage, GenerateOptions } from "./types";
 
@@ -26,5 +27,8 @@ export function getProvider(): AIProvider {
   else if (anthropicKey) cached = new AnthropicProvider(anthropicKey);
   else cached = new MockProvider();
 
+  // Wrapped once, at the seam, so every provider reports its own health and a
+  // future one is covered without anyone remembering to instrument it.
+  cached = instrumentAI(cached);
   return cached;
 }

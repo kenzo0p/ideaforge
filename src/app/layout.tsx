@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
+import DegradedBanner from "@/components/DegradedBanner";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listProjects } from "@/lib/db/projects";
 import { unreadNotificationCount } from "@/lib/db/reminders";
@@ -70,6 +71,7 @@ export default async function RootLayout({
           initialTheme={theme || "system"}
           initialCollapsed={collapsed}
         >
+          <DegradedBanner />
           {children}
         </AppShell>
       </body>

@@ -1,3 +1,4 @@
+import { classifyFailure } from "@/lib/health/failures";
 import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
@@ -55,7 +56,15 @@ export async function POST(req: Request) {
       headers: { "Cache-Control": "no-store", "X-Provider": getProvider().label },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Comparison failed.";
-    return Response.json({ error: message }, { status: 500 });
+    // The upstream message is for the log, never for the browser: it carries
+    // the vendor's name, our account state and their request id.
+    const { userMessage, detail, kind, selfHealing } = classifyFailure(err);
+    console.error(`compare failed (${kind}):`, detail.slice(0, 300));
+    return Response.json(
+      { error: userMessage, retryable: selfHealing },
+      // 503 when the dependency is down rather than 500: it says "come back",
+      // and it keeps genuine bugs on our side distinguishable in the logs.
+      { status: kind === "bad_request" ? 500 : 503 },
+    );
   }
 }

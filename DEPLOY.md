@@ -199,6 +199,34 @@ upgrade or trigger reminders manually.
 
 ---
 
+## Health checks and monitoring
+
+`GET /api/health` reports whether this instance can reach its dependencies:
+
+```json
+{ "status": "ok", "checks": { "ai": "ok", "search": "ok", "db": "ok" }, "at": "…" }
+```
+
+Point Render's **Health Check Path** at it, and point an uptime monitor
+(UptimeRobot, BetterStack — the free tiers are enough) at the same URL with an alert on
+the body containing `"status":"degraded"`.
+
+Two deliberate choices:
+
+- **It returns 200 when the AI provider is down**, and only 503 when the database is
+  unreachable. A platform health check that fails on a degraded model will pull the
+  instance out of rotation and turn "AI is down" into "the site is down".
+- **It carries no error detail.** Anyone can call it, so it says `degraded` and nothing
+  more. The vendor's actual message is on `/admin/analytics` under **Dependencies**,
+  behind `ADMIN_USERNAMES`.
+
+The status is in-process and resets on deploy, so with several instances each reports its
+own view — which is what you want when one instance's network is broken and the rest are
+fine.
+
+Set `ADMIN_USERNAMES` to your own username, or nobody can see the detail. Unset means
+nobody, which is the safe default but also means you'll be diagnosing outages from logs.
+
 ## Verifying the deploy
 
 1. Sign up with a real email → the verification mail should arrive (Resend).
