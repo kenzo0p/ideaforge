@@ -1,5 +1,5 @@
 import { requireApiUser } from "@/lib/auth/api";
-import { getBillingProvider } from "@/lib/billing/provider";
+import { getBillingProvider, simulatedBillingAllowed } from "@/lib/billing/provider";
 import { PLANS, type PlanId } from "@/lib/billing/plans";
 import { upsertSubscription, recordBillingEvent } from "@/lib/db/subscriptions";
 import { membershipFor, setOrgPlan } from "@/lib/db/orgs";
@@ -45,6 +45,15 @@ export async function POST(req: Request) {
   }
 
   const provider = getBillingProvider();
+  // Refused here rather than at the redirect: sending someone to a 404 after
+  // they clicked Upgrade reads as a broken product, not a missing setting.
+  if (provider.isMock && !simulatedBillingAllowed()) {
+    return Response.json(
+      { error: "Payments aren't set up on this deployment yet." },
+      { status: 503 },
+    );
+  }
+
   try {
     const session = await provider.createSubscription({
       planId,

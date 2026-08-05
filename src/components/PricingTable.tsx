@@ -32,10 +32,13 @@ export default function PricingTable({
   currentPlan,
   signedIn,
   simulated,
+  payable,
 }: {
   currentPlan: PlanId;
   signedIn: boolean;
   simulated: boolean;
+  /** False when no gateway is configured and simulation is off — nothing here can complete. */
+  payable: boolean;
 }) {
   const [busy, setBusy] = useState<PlanId | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,10 +68,17 @@ export default function PricingTable({
 
   return (
     <div>
-      {simulated && (
+      {!payable ? (
         <p className="mb-5 rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-warning">
-          No payment gateway is configured, so upgrades here are simulated — no money moves.
+          Payments aren&apos;t set up on this deployment yet, so upgrading isn&apos;t available.
+          Everything on the Free tier works as normal.
         </p>
+      ) : (
+        simulated && (
+          <p className="mb-5 rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-sm text-warning">
+            No payment gateway is configured, so upgrades here are simulated — no money moves.
+          </p>
+        )
       )}
 
       <div className="grid gap-4 md:grid-cols-3">

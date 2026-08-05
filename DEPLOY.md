@@ -14,6 +14,21 @@ exactly as they do locally, with no webhook or cron to wire up.
 Both need MongoDB — see [§1](#1-create-the-database). Jump to
 [Render](#deploying-to-render) or read on for Vercel.
 
+## Billing on a live deployment
+
+With no Razorpay keys set the app falls back to the mock provider, which grants plans
+instantly and without payment. That path is **disabled in production** — `/api/billing/simulate`
+returns 404 and `/api/billing/checkout` returns 503 with a clear message, so nobody can
+award themselves the top tier by visiting a URL.
+
+For a demo deployment where simulated upgrades *are* the point, opt in explicitly:
+
+```
+ALLOW_SIMULATED_BILLING=1
+```
+
+Leave it unset anywhere real.
+
 ## Deploying to Render
 
 1. **New → Web Service**, connect the repo.

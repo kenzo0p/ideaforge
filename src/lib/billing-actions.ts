@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getSubscription, setSubscriptionStatus, recordBillingEvent } from "@/lib/db/subscriptions";
-import { getBillingProvider } from "@/lib/billing/provider";
+import { billingPayable, getBillingProvider } from "@/lib/billing/provider";
 import { planFor } from "@/lib/billing/resolve";
 import { membershipFor } from "@/lib/db/orgs";
 import { listProjects } from "@/lib/db/projects";
@@ -51,6 +51,7 @@ export async function billingStatusAction() {
     cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
     projectsUsed: owned,
     simulated: getBillingProvider().isMock,
+    payable: billingPayable(),
   };
 }
 

@@ -220,6 +220,29 @@ class MockBillingProvider implements BillingProvider {
 
 let cached: BillingProvider | null = null;
 
+/**
+ * Whether the simulated-payment path may be used.
+ *
+ * The mock provider grants a plan immediately with no money involved, which is
+ * exactly what you want for demos and tests and exactly what you do not want
+ * reachable on a live deployment: with no gateway configured, anyone signed in
+ * could visit /api/billing/simulate?plan=team and award themselves the top tier.
+ *
+ * Outside production it stays on, because simulation is the only way to
+ * exercise the tier logic at all. In production it takes a deliberate opt-in —
+ * still available for a demo deployment, but never by omission.
+ */
+export function simulatedBillingAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.NODE_ENV !== "production") return true;
+  const flag = env.ALLOW_SIMULATED_BILLING?.trim().toLowerCase();
+  return flag === "1" || flag === "true";
+}
+
+/** Can this deployment actually take an upgrade? */
+export function billingPayable(env: NodeJS.ProcessEnv = process.env): boolean {
+  return !getBillingProvider().isMock || simulatedBillingAllowed(env);
+}
+
 export function getBillingProvider(): BillingProvider {
   if (cached) return cached;
   const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET } = process.env;

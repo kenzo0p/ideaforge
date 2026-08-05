@@ -22,6 +22,7 @@ const fail = await import("../src/lib/health/failures.ts");
 const health = await import("../src/lib/health/status.ts");
 const ver = await import("../src/lib/db/versions.ts");
 const vdiff = await import("../src/lib/versions/diff.ts");
+const bill = await import("../src/lib/billing/provider.ts");
 const ent2 = await import("../src/lib/billing/resolve.ts");
 const dom = await import("../src/lib/orgs/domains.ts");
 const ent = await import("../src/lib/billing/plans.ts");
@@ -631,6 +632,24 @@ console.log("\n\x1b[1mversion history\x1b[0m");
   await p.deleteProject(proj.id, vUser.id);
   eq("history is purged with the project", await ver.countVersions(proj.id), 0);
   await u.deleteUser(vUser.id);
+}
+
+console.log("\n\x1b[1msimulated billing gate\x1b[0m");
+{
+  // The mock provider grants a plan with no money involved. Reachable on a live
+  // deployment, that is a free upgrade for anyone who guesses the URL.
+  const allowed = (env) => bill.simulatedBillingAllowed(env);
+
+  eq("on in development", allowed({ NODE_ENV: "development" }), true);
+  eq("on in test", allowed({ NODE_ENV: "test" }), true);
+  eq("off in production by default", allowed({ NODE_ENV: "production" }), false);
+  eq("off in production when the flag is absent", allowed({ NODE_ENV: "production", ALLOW_SIMULATED_BILLING: "" }), false);
+  eq("off for a non-affirmative value", allowed({ NODE_ENV: "production", ALLOW_SIMULATED_BILLING: "no" }), false);
+  eq("off for 0", allowed({ NODE_ENV: "production", ALLOW_SIMULATED_BILLING: "0" }), false);
+  // A demo deployment can still opt in deliberately.
+  eq("on in production with =1", allowed({ NODE_ENV: "production", ALLOW_SIMULATED_BILLING: "1" }), true);
+  eq("on in production with =true", allowed({ NODE_ENV: "production", ALLOW_SIMULATED_BILLING: "true" }), true);
+  eq("case and whitespace tolerant", allowed({ NODE_ENV: "production", ALLOW_SIMULATED_BILLING: " TRUE " }), true);
 }
 
 console.log("\n\x1b[1mcascade on delete (no foreign keys in Mongo)\x1b[0m");

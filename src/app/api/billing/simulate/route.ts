@@ -1,7 +1,7 @@
 import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getBillingProvider } from "@/lib/billing/provider";
+import { getBillingProvider, simulatedBillingAllowed } from "@/lib/billing/provider";
 import { recordBillingEvent, upsertSubscription } from "@/lib/db/subscriptions";
 import { membershipFor, setOrgPlan } from "@/lib/db/orgs";
 import { publicUrl } from "@/lib/http/origin";
@@ -20,6 +20,12 @@ export async function GET(req: Request) {
   const provider = getBillingProvider();
   if (!provider.isMock) {
     return new Response("Not available: a real payment gateway is configured.", { status: 404 });
+  }
+  // The gateway check alone left this open on any live deployment that simply
+  // hadn't configured Razorpay yet — a free upgrade for anyone who guessed the
+  // URL. 404 rather than 403, so it doesn't confirm the route exists.
+  if (!simulatedBillingAllowed()) {
+    return new Response("Not found", { status: 404 });
   }
 
   const user = await getCurrentUser();

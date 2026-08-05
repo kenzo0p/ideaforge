@@ -2,7 +2,7 @@ import { CreditCard } from "lucide-react";
 import PricingTable from "@/components/PricingTable";
 import { getCurrentUser } from "@/lib/auth/session";
 import { currentPlan } from "@/lib/billing/entitlements";
-import { getBillingProvider } from "@/lib/billing/provider";
+import { billingPayable, getBillingProvider } from "@/lib/billing/provider";
 import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 
@@ -28,6 +28,7 @@ export default async function PricingPage() {
         currentPlan={plan.id}
         signedIn={!!user}
         simulated={getBillingProvider().isMock}
+        payable={billingPayable()}
       />
     </main>
   );

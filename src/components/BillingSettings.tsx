@@ -15,6 +15,8 @@ interface Status {
   cancelAtPeriodEnd: boolean;
   projectsUsed: number;
   simulated: boolean;
+  /** False when this deployment can't take an upgrade at all. */
+  payable: boolean;
 }
 
 /** Current plan, usage against its limits, and cancellation. */
@@ -81,7 +83,7 @@ export default function BillingSettings({ status }: { status: Status }) {
           className="inline-flex items-center gap-1.5 rounded-lg bg-brand-solid px-3.5 py-2 text-sm font-semibold text-on-brand transition hover:opacity-90"
         >
           <CreditCard className="size-4" />
-          {ownsIt ? "Change plan" : paid ? "See plans" : "Upgrade"}
+          {!status.payable ? "See plans" : ownsIt ? "Change plan" : paid ? "See plans" : "Upgrade"}
           <ArrowUpRight className="size-3.5" />
         </Link>
 
