@@ -10,7 +10,9 @@
     "check:contrast": "node scripts/check-contrast.mjs",
     "db:migrate": "node --env-file=.env.local scripts/migrate-sqlite-to-mongo.mjs",
     "test:db": "node --experimental-strip-types --import ./scripts/ts-resolve-register.mjs --env-file=.env.local scripts/smoke-db.mjs",
-    "eval": "node scripts/eval/run.mjs"
+    "eval": "node scripts/eval/run.mjs",
+    "eval:fast": "node scripts/eval/run.mjs --tag=honesty,ranking,robustness",
+    "eval:baseline": "node scripts/eval/run.mjs --update-baseline"
   },
   "dependencies": {
     "docx": "^9.7.1",

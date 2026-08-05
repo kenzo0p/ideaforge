@@ -89,6 +89,40 @@ npm run dev      # http://localhost:3000  (uses 3005 in a shared setup)
 No keys needed — it starts on the **Demo (offline)** provider. To use a live model, copy
 `.env.example` to `.env.local` and set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
+## Checks
+
+```bash
+npm run test:db          # every repository function, against a real MongoDB
+npm run check:contrast   # WCAG AA contrast across the palette, both themes
+npm run eval             # output quality against the golden set (needs a live model)
+```
+
+`npm run eval` is the unusual one. The other two test that the code works; this tests
+whether the *answers* are any good — the part that decays silently when a prompt is edited
+or a model is swapped. Thirty cases assert substance, not wording: that a crowded space is
+called crowded, that a geospatial idea produces geospatial tooling, that every `[n]` marker
+resolves to a real source, that an instruction hidden in the idea field is analysed rather
+than obeyed.
+
+Three things make it usable as a gate rather than a curiosity:
+
+- **Variance is handled.** `--repeat=3` scores each check by majority and reports anything
+  that disagreed with itself as *flaky* instead of counting it either way.
+- **Regressions beat absolutes.** The pass/fail decision is made against a stored baseline.
+  "83% passed" says nothing; "two checks that passed yesterday fail today" is the sentence
+  that should stop a deploy.
+- **A run that couldn't reach the model reports nothing.** Provider outages — no credit,
+  bad key, rate limit — abort the run with the provider's own message and exit `2`, leaving
+  the baseline untouched. Without this the harness invents findings: an API key running out
+  mid-run once produced a confident "59%, locale is broken" when nothing was wrong.
+
+```bash
+EVAL_COOKIE="ideaforge_session=…" npm run eval            # all 30 cases
+EVAL_COOKIE="…" npm run eval:fast                         # deploy gate, no live search
+EVAL_COOKIE="…" npm run eval -- --tag=grounding --repeat=3
+EVAL_COOKIE="…" npm run eval:baseline                     # record the current run
+```
+
 ## Stack
 
 Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · streaming API routes.
