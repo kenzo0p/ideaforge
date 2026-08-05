@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { col } from "./index";
 import { canMentorView } from "./orgs";
+import { purgeVersions, recordVersion } from "./versions";
 import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
 
 // ---------------------------------------------------------------------------
@@ -175,24 +176,46 @@ export async function createProject(input: SaveProjectInput): Promise<Project> {
 /**
  * Overwrite a project's artifacts (re-saving an in-progress session). Scoped to
  * the owner: a mismatched userId updates nothing.
+ *
+ * The previous contents are snapshotted first. This used to be a blind $set, so
+ * re-running validation on a saved project destroyed the earlier verdict with
+ * no way back — which is ordinary use, not an edge case.
  */
 export async function updateProjectArtifacts(
   id: string,
   userId: string,
   input: SaveProjectInput,
+  options: { forceVersion?: boolean } = {},
 ): Promise<void> {
-  await (await projects()).updateOne(
-    { _id: id, userId },
-    {
-      $set: {
-        title: input.title,
-        validationMarkdown: input.validationMarkdown ?? null,
-        research: input.research ?? null,
-        plan: input.plan ?? null,
-        updatedAt: Date.now(),
-      },
+  const c = await projects();
+  const before = await c.findOne({ _id: id, userId });
+  if (!before) return;
+
+  const next = {
+    title: input.title,
+    validationMarkdown: input.validationMarkdown ?? null,
+    research: input.research ?? null,
+    plan: input.plan ?? null,
+  };
+
+  // History must never be able to fail the save that produced it. Losing a
+  // snapshot is a smaller harm than refusing to persist the user's work.
+  await recordVersion({
+    projectId: id,
+    userId,
+    previous: {
+      title: before.title,
+      validationMarkdown: before.validationMarkdown ?? null,
+      research: before.research ?? null,
+      plan: before.plan ?? null,
     },
-  );
+    next,
+    force: options.forceVersion,
+  }).catch((err) => {
+    console.error("Version snapshot failed:", err instanceof Error ? err.message : err);
+  });
+
+  await c.updateOne({ _id: id, userId }, { $set: { ...next, updatedAt: Date.now() } });
 }
 
 /** Fetch a project if `userId` owns it or was invited onto it. */
@@ -351,7 +374,44 @@ export async function deleteProject(id: string, userId: string): Promise<void> {
     (await col("projectComments")).deleteMany({ projectId: id }),
     (await col("watches")).deleteMany({ projectId: id }),
     (await col("watchFindings")).deleteMany({ projectId: id }),
+    purgeVersions(id),
   ]);
+}
+
+/**
+ * Roll a project back to an earlier snapshot.
+ *
+ * Goes through `updateProjectArtifacts`, so the restore is itself snapshotted
+ * first. Someone who restores the wrong version can undo that too, which is the
+ * difference between a history feature and a second way to lose work.
+ */
+export async function restoreVersion(
+  projectId: string,
+  userId: string,
+  versionId: string,
+): Promise<boolean> {
+  const { getVersion } = await import("./versions");
+  const version = await getVersion(projectId, versionId);
+  if (!version) return false;
+
+  const owned = await isProjectOwner(projectId, userId);
+  if (!owned) return false;
+
+  await updateProjectArtifacts(
+    projectId,
+    userId,
+    {
+      userId,
+      title: version.title,
+      idea: "",
+      validationMarkdown: version.validationMarkdown,
+      research: version.research,
+      plan: version.plan,
+    },
+    // Always append: this is the snapshot that makes the restore reversible.
+    { forceVersion: true },
+  );
+  return true;
 }
 
 // --- Public sharing --------------------------------------------------------

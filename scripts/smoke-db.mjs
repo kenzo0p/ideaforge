@@ -20,6 +20,8 @@ const w = await import("../src/lib/db/watches.ts");
 const o = await import("../src/lib/db/orgs.ts");
 const fail = await import("../src/lib/health/failures.ts");
 const health = await import("../src/lib/health/status.ts");
+const ver = await import("../src/lib/db/versions.ts");
+const vdiff = await import("../src/lib/versions/diff.ts");
 const ent2 = await import("../src/lib/billing/resolve.ts");
 const dom = await import("../src/lib/orgs/domains.ts");
 const ent = await import("../src/lib/billing/plans.ts");
@@ -549,6 +551,86 @@ console.log("\n\x1b[1mdependency health\x1b[0m");
   eq("search degrades alone", health.getHealth("search").status, "degraded");
   eq("and the model is untouched", health.getHealth("ai").status, "unknown");
   health.resetHealth();
+}
+
+console.log("\n\x1b[1mversion history\x1b[0m");
+{
+  // The pure diff first — everything the UI says rests on it.
+  const d = vdiff.diffLines("a\nb\nc", "a\nB\nc");
+  eq("a changed line is one add and one remove", [d.added.length, d.removed.length], [1, 1]);
+  eq("and the rest is unchanged", d.unchanged, 2);
+  // A set difference would call every reordered line both added and removed.
+  const reordered = vdiff.diffLines("one\ntwo\nthree", "three\none\ntwo");
+  ok("reordering is not reported as a rewrite", reordered.added.length + reordered.removed.length <= 2);
+  eq("identical text has no diff", vdiff.diffLines("same", "same").added.length, 0);
+
+  const pd = vdiff.diffPlans(
+    { milestones: [{ phase: "W1", goal: "Ship auth", tasks: [], deliverable: "x" }], techStack: [{ category: "Data", choice: "Postgres", why: "" }], apis: [] },
+    { milestones: [{ phase: "W1", goal: "Ship auth", tasks: [], deliverable: "x" }, { phase: "W2", goal: "Add billing", tasks: [], deliverable: "y" }], techStack: [{ category: "Data", choice: "Mongo", why: "" }], apis: [] },
+  );
+  eq("a new milestone is detected", pd.milestones.added, ["Add billing"]);
+  eq("and the count delta", pd.milestoneDelta, 1);
+  eq("swapping a stack choice shows both sides", [pd.techStack.added, pd.techStack.removed], [["Data: Mongo"], ["Data: Postgres"]]);
+
+  const rd = vdiff.diffResearch(
+    { citations: [{ id: 1, title: "a", url: "https://one.test/x", source: "one" }], existingSolutions: [], gaps: [] },
+    { citations: [{ id: 1, title: "a", url: "https://one.test/x", source: "one" }, { id: 2, title: "b", url: "https://two.test/y", source: "two" }], existingSolutions: [{}], gaps: [] },
+  );
+  eq("citation delta", rd.citationDelta, 1);
+  eq("only genuinely new domains are listed", rd.newSources, ["two.test"]);
+
+  // Now the storage behaviour, against the real database.
+  const vUser = await u.createUser(`ver-${Date.now()}@example.test`, "salt:hash", "Ver");
+  const proj = await p.createProject({ userId: vUser.id, title: "V1", idea: "An idea" });
+  eq("a new project has no history", await ver.countVersions(proj.id), 0);
+
+  // First save has nothing before it — a blank version 1 is noise.
+  await p.updateProjectArtifacts(proj.id, vUser.id, { userId: vUser.id, title: "V1", idea: "An idea", validationMarkdown: "first verdict" });
+  eq("the first save records nothing", await ver.countVersions(proj.id), 0);
+
+  // The case this feature exists for: regenerating over existing work.
+  await p.updateProjectArtifacts(proj.id, vUser.id, { userId: vUser.id, title: "V1", idea: "An idea", validationMarkdown: "second verdict" });
+  eq("overwriting real content snapshots it", await ver.countVersions(proj.id), 1);
+  const [first] = await ver.listVersions(proj.id);
+  eq("the snapshot holds the OLD text", (await ver.getVersion(proj.id, first.id)).validationMarkdown, "first verdict");
+  eq("and says what changed", first.changed, ["validation"]);
+  eq("while the project holds the new", (await p.getProject(proj.id, vUser.id)).validationMarkdown, "second verdict");
+
+  // Autosave re-sends identical artifacts constantly.
+  await p.updateProjectArtifacts(proj.id, vUser.id, { userId: vUser.id, title: "V1", idea: "An idea", validationMarkdown: "second verdict" });
+  eq("an identical save adds nothing", await ver.countVersions(proj.id), 1);
+
+  // Rapid edits coalesce rather than filling the timeline.
+  await p.updateProjectArtifacts(proj.id, vUser.id, { userId: vUser.id, title: "V1", idea: "An idea", validationMarkdown: "third verdict" });
+  eq("a quick follow-up edit coalesces", await ver.countVersions(proj.id), 1);
+
+  // Restore, and restoring is itself undoable — including inside the coalescing
+  // window, where folding into the entry being restored from would silently
+  // discard the state the user is replacing.
+  const beforeRestore = (await p.getProject(proj.id, vUser.id)).validationMarkdown;
+  const countBefore = await ver.countVersions(proj.id);
+  const restored = await p.restoreVersion(proj.id, vUser.id, first.id);
+  eq("restore reports success", restored, true);
+  eq("and the project is back to the old text", (await p.getProject(proj.id, vUser.id)).validationMarkdown, "first verdict");
+  eq("a restore always appends, never coalesces", await ver.countVersions(proj.id), countBefore + 1);
+  const afterRestore = await ver.listVersions(proj.id);
+  const undo = await ver.getVersion(proj.id, afterRestore[0].id);
+  eq("so the replaced state is recoverable", undo.validationMarkdown, beforeRestore);
+
+  // A version id alone must not reach across projects.
+  const other = await p.createProject({ userId: vUser.id, title: "Other", idea: "Another" });
+  eq("a version is scoped to its project", await ver.getVersion(other.id, first.id), null);
+  eq("and cannot be restored into another", await p.restoreVersion(other.id, vUser.id, first.id), false);
+
+  // Someone else's project is not theirs to roll back.
+  const stranger = await u.createUser(`str-${Date.now()}@example.test`, "salt:hash", "Stranger");
+  eq("a stranger cannot restore", await p.restoreVersion(proj.id, stranger.id, first.id), false);
+  await u.deleteUser(stranger.id);
+
+  // Deleting the project takes its history with it.
+  await p.deleteProject(proj.id, vUser.id);
+  eq("history is purged with the project", await ver.countVersions(proj.id), 0);
+  await u.deleteUser(vUser.id);
 }
 
 console.log("\n\x1b[1mcascade on delete (no foreign keys in Mongo)\x1b[0m");

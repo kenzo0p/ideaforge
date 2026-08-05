@@ -215,6 +215,9 @@ async function ensureIndexes(db: Db): Promise<void> {
 
     db.collection("projectComments").createIndex({ projectId: 1, createdAt: 1 }),
 
+    // The timeline read, the coalescing lookup and the prune all sort by this.
+    db.collection("projectVersions").createIndex({ projectId: 1, createdAt: -1 }),
+
     // The public directory and the sitemap read exactly this.
     db.collection("projects").createIndex(
       { listed: 1, listedAt: -1 },

@@ -11,6 +11,7 @@ import AgentConsole from "@/components/AgentConsole";
 import ConnectTelegram from "@/components/ConnectTelegram";
 import ProjectReminders from "@/components/ProjectReminders";
 import ShareProject from "@/components/ShareProject";
+import VersionHistory from "@/components/VersionHistory";
 import Collaborators from "@/components/Collaborators";
 import CommentThread from "@/components/CommentThread";
 import { collaborationStateAction } from "@/lib/collab-actions";
@@ -162,6 +163,10 @@ export default async function ProjectPage({
                 initialListed={project.listed}
               />
             )}
+            {/* History sits with the other project-level tools rather than on a
+                tab of its own: it is something you reach for after a
+                regeneration, not a place you go. */}
+            <VersionHistory projectId={project.id} isOwner={!!collab?.isOwner} />
             <AgentConsole projectId={project.id} />
             {telegramConfigured && <ConnectTelegram linked={telegramLinked} />}
             {telegramConfigured && (
