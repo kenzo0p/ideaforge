@@ -1,132 +1,148 @@
-# IdeaForge — Search Less. Solve More.
+# 🛠️ IdeaForge — AI-Powered Product Research & Build Plan Copilot
 
-An **AI-powered Research & Innovation Copilot for students**, built for the **iNSIGHTS Track**.
-Drop in a one-line idea and IdeaForge takes you from *problem discovery* to a *validated,
-buildable project* — problem validation, citation-backed research, an auto-generated build
-plan, and the resources to ship it.
+[![Next.js](https://img.shields.io/badge/Next.js-16.2-black?logo=next.js)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19.2-61DAFB?logo=react)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.0-38BDF8?logo=tailwindcss)](https://tailwindcss.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb)](https://www.mongodb.com/)
+[![Anthropic Claude](https://img.shields.io/badge/AI-Claude_3.5_Sonnet-D97706?logo=anthropic)](https://www.anthropic.com/)
 
-> Enter: _"Build an AI solution to reduce food waste in college hostels."_
-> Get back: problem validation → research → solution comparison → innovation gaps →
-> architecture → roadmap → tech stack → repos, APIs & datasets → timeline → deck-ready docs.
+> **From "I have an idea" to "I know if it's worth building, and here is the plan" in under 4 minutes — backed by verifiable sources.**
 
-## Status — built in parts
+🌐 **Live App**: [https://ideaforge-2e1m.onrender.com](https://ideaforge-2e1m.onrender.com)
 
-| Part | Scope | Status |
-|------|-------|--------|
-| **1** | Foundation: provider abstraction, iNSIGHTS Layer 2 service seam, idea → **problem validation** (streamed) | ✅ Done |
-| **2** | **DeepSearch** + **Real-time Web Intelligence** — web search, citation-backed research, solution comparison, gaps | ✅ Done |
-| **3** | **Project HUB** + **Knowledge Clustering** — milestones, architecture, stack, APIs, timeline; repos/datasets/papers | ✅ Done |
-| **4** | **Personalized Dashboards** + **Research Workspaces** — MongoDB persistence, save/open projects, sources/notes/decisions | ✅ Done |
-| **5** | **AI Agents** (in-app console + Telegram webhook) + **Multilingual** (8-language selector, locale threaded end-to-end) | ✅ Done |
+---
 
-The brief requires **≥4** Layer 2 capabilities; **all eight are live.** 🎉
+## 📖 Overview
 
-## Architecture
+Turning a raw concept into an actionable project plan usually takes founders, hackathon participants, and researchers 1 to 2 weeks of endless browser tabs, unverified claims, and manual structure design.
 
-Two clean seams keep features decoupled from vendors:
+**IdeaForge** is an end-to-end research and build plan copilot. It takes a one-line idea and delivers:
+1. **Honest Problem Validation & Severity Scoring**: Evaluates whether the pain point is real, assigns a numerical severity score, and highlights existing market saturation.
+2. **Deep Search Briefing with Real Citations**: Performs live web searches, grounding every claim in cited sources. **No hallucinated links** — URLs are strictly derived from search results and pruned if unreferenced.
+3. **Structured Technical Build Plan**: Generates custom tech stack recommendations, phased milestones, and fetches real codebases (GitHub), datasets (Kaggle), academic papers (CORE/arXiv), and video tutorials (YouTube).
+4. **Multi-Format Deliverable Export**: Converts research & build plans into presentation-ready PowerPoint decks (`.pptx`), Word documents (`.docx`), Markdown (`.md`), or printable PDFs with a single click.
 
+---
+
+## ✨ Key Features
+
+- ⚡ **Instant Idea Validation & Brutal Feedback**: Forces the AI model to commit to an interpretation before scoring severity (1–10), reach, and feasibility. Will explicitly advise *against* building weak or saturated ideas.
+- 🔎 **Citation-Grounded Research Engine**: Combines Claude 3.5 Sonnet with Tavily Search API. Every bracketed citation links directly to verified source URLs; unused sources are automatically filtered out.
+- ⚖️ **Deterministic Multi-Idea Comparison**: Compare up to 3 ideas side-by-side. The AI scores each candidate across dimensions while deterministic code calculates weighted totals and rankings.
+- 🛠️ **Tailored Technical Stack & Resource Aggregation**: Recommends domain-specific tech stacks with explicit rationale and queries live APIs to attach relevant GitHub repositories, Kaggle datasets, and CORE research papers.
+- 📊 **Pitch Deck Review**: Upload `.pptx` or `.pdf` pitch decks to receive an automated score, section-by-section breakdown, missing slides analysis, and actionable improvement recommendations.
+- 💡 **Domain Problem Discovery**: For users without an idea, IdeaForge mines live signals across domain verticals (e.g., student life, rural healthcare, developer tooling) to surface real-world problems worth solving.
+- 👥 **Real-Time Workspaces & Collaboration**: Shared project hubs supporting read-only public links, internal `@username` collaboration invites, and live status propagation powered by Server-Sent Events (SSE).
+- 📱 **Telegram Bot Agent**: Omnichannel integration allowing users to query project status (`/next`, `/projects`), trigger research updates, and receive automated reminder notifications on Telegram.
+- 🧪 **Built-In AI Evaluation Framework**: Custom test suite (`npm run eval`) for benchmarking model honesty, candidate ranking accuracy, and prompt robustness against gold-standard baselines.
+
+---
+
+## 🏗️ Tech Stack & Architecture
+
+| Component | Technology / Service | Description |
+|---|---|---|
+| **Frontend** | Next.js 16 (App Router), React 19, TypeScript | Server & Client components with dynamic streaming UI |
+| **Styling** | Tailwind CSS v4, Lucide Icons | Responsive, dark/light themes verified for WCAG AA contrast |
+| **Database** | MongoDB Atlas | Cloud document store with native connection pooling |
+| **AI / LLM** | Claude 3.5 Sonnet (Anthropic API) | Multi-step reasoning, validation, synthesis, and planning |
+| **Search Engine** | Tavily API | Real-time web search for citation-backed briefings |
+| **Resource APIs** | GitHub REST API, Kaggle API, CORE API, YouTube API | Direct retrieval of open-source repos, datasets, & literature |
+| **Authentication** | Firebase Auth / Server-Verified Google OAuth | OAuth token validation against Google public keys & JWT sessions (`jose`) |
+| **Document Export** | `pptxgenjs`, `docx`, `pdfjs-dist`, `jszip` | Native binary generation of PowerPoint, Word, & PDF documents |
+| **Messaging / Bot** | Telegram Bot API | Long-polling (dev) & Webhooks (production) for remote project management |
+| **Testing / Eval** | Custom Node.js ES Module Eval Suite | Automated LLM output regression testing & evaluation |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Node.js**: v20.0.0 or higher
+- **Package Manager**: `npm`
+- **Database**: MongoDB Atlas connection string (or local MongoDB)
+
+### Environment Setup
+
+Create a `.env.local` file in the root directory:
+
+```env
+# Required
+MONGODB_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/ideaforge
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+
+# Recommended (Integrations)
+TAVILY_API_KEY=your_tavily_api_key
+GITHUB_TOKEN=your_github_token
+KAGGLE_API_KEY=your_kaggle_api_key
+CORE_API_KEY=your_core_api_key
+RESEND_API_KEY=your_resend_api_key
+EMAIL_FROM=noreply@yourdomain.com
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+TELEGRAM_WEBHOOK_SECRET=your_webhook_secret
 ```
-UI / API routes
-      │
-      ▼
-lib/insights/layer2.ts   ← the iNSIGHTS Layer 2 service (one method per capability)
-      │            │
-      ▼            ▼
-lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
-(OpenAI·Anthropic·Mock)        (Tavily·Mock)
-```
 
-- **`lib/ai`** — a tiny `AIProvider` interface (`streamText` / `generateText`) with three
-  implementations. `getProvider()` auto-selects from env. The **Mock** provider synthesizes
-  realistic output locally, so the whole app runs with **zero API keys**.
-- **`lib/search`** — a `SearchProvider` interface powering DeepSearch. **Tavily** for live web
-  results, **Mock** for offline demos (clearly labeled in the UI).
-- **`lib/insights`** — `Layer2Service` is the single seam the copilot's features call. Swapping
-  in the real iNSIGHTS Layer 2 API later means editing only `layer2.ts`. Covers **problem
-  discovery** (find real problems worth solving in a domain, grounded in live web signals),
-  validation, DeepSearch, Project HUB, and knowledge clustering.
-- **`lib/email`** — swappable mailer (console dev / Resend prod) powering email verification,
-  with a graceful fallback link when a real send can't be delivered.
-- **`lib/db`** — **MongoDB** persistence, one repository module per aggregate. A project is a
-  single document: its plan, research, milestone progress and workspace items are all embedded,
-  so reads are one round-trip and deleting a project is atomic. Mutations go through Server
-  Actions in `lib/actions.ts`. Set `MONGODB_URI`; indexes are created on first boot, and
-  short-lived records (sessions, tokens, rate-limit hits) are reaped by TTL indexes.
-- **`lib/auth`** — email + password authentication with **no external library**: passwords
-  hashed with Node's `crypto.scrypt` (salted), opaque session tokens in an HttpOnly cookie
-  backed by a `sessions` table. `getCurrentUser()` gates server components/actions; every
-  project is scoped to its owner (`user_id`), so `getProject`/`listProjects` enforce
-  authorization at the query level. Guests can use the copilot but must sign in to save.
-- **`lib/agents`** — one channel-agnostic `handleAgentMessage()` brain powering both the in-app
-  **Agent Console** (`/api/agents/message`) and a **Telegram webhook** (`/api/agents/telegram`).
-  Commands (`/status`, `/next`, `/plan`, `/projects`) run locally; free-text is answered by the
-  LLM grounded in the project's saved artifacts. Works with no token; connects a real bot when
-  `TELEGRAM_BOT_TOKEN` is set (see `.env.example`).
-- **`lib/billing`** — plans, entitlements, and the payment provider seam. `plans.ts` is the one
-  table describing what each tier gets; `resolve.ts` answers "what plan is this user on?" by
-  taking the better of their own subscription and their workspace's; `entitlements.ts` is the
-  only place that answers "is this allowed?", so a gate can never be enforced in one route and
-  forgotten in its sibling.
-- **`lib/db/orgs` + `lib/orgs`** — organisations: a lab, class, or cohort on one plan. Members
-  join automatically by verified email domain, and mentors can read and comment on the whole
-  workspace's projects without being invited to each one. Domain claims are checked against the
-  claimant's own address and public mailbox providers can never be claimed, which is what stops
-  a domain claim from being a way to adopt strangers.
-- **Public briefs** — a shared brief is unlisted by default; its owner can separately
-  list it, which adds it to `/explore`, the sitemap, and search indexes. Everything else is
-  `noindex` and the signed-in surface is disallowed by prefix in `robots.txt`, so a new
-  private route is private without anyone remembering to add it.
-- **Version history** — every regeneration snapshots what it replaced, so re-running
-  validation no longer destroys the previous verdict. Rapid autosaves coalesce into one
-  entry; a restore never does, because folding it in would discard the state being
-  replaced and make the restore itself irreversible.
-- **Multilingual** — an 8-language selector threads a BCP-47 `locale` through every prompt, so a
-  live model responds in the chosen language across validation, research, plan, and the agent.
+### Installation & Local Development
 
-## Run it
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/your-username/ideaforge.git
+   cd ideaforge
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Verify Database Connection**:
+   ```bash
+   npm run test:db
+   ```
+
+4. **Run the Development Server**:
+   ```bash
+   npm run dev
+   ```
+
+5. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+---
+
+## 🧪 Evaluation & Quality Control
+
+IdeaForge includes a built-in evaluation framework to test AI quality, honesty, ranking accuracy, and robustness:
 
 ```bash
-npm install
-npm run dev      # http://localhost:3000  (uses 3005 in a shared setup)
+# Run full evaluation suite
+npm run eval
+
+# Fast evaluation on specific tags
+npm run eval:fast
+
+# Update evaluation baselines
+npm run eval:baseline
 ```
 
-No keys needed — it starts on the **Demo (offline)** provider. To use a live model, copy
-`.env.example` to `.env.local` and set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
+---
 
-## Checks
+## 🌐 Deployment
 
-```bash
-npm run test:db          # every repository function, against a real MongoDB
-npm run check:contrast   # WCAG AA contrast across the palette, both themes
-npm run eval             # output quality against the golden set (needs a live model)
-```
+IdeaForge is production-ready for deployment on **Render** (recommended for persistent background workers & Telegram polling) or **Vercel** (serverless functions with webhook integration).
 
-`npm run eval` is the unusual one. The other two test that the code works; this tests
-whether the *answers* are any good — the part that decays silently when a prompt is edited
-or a model is swapped. Thirty cases assert substance, not wording: that a crowded space is
-called crowded, that a geospatial idea produces geospatial tooling, that every `[n]` marker
-resolves to a real source, that an instruction hidden in the idea field is analysed rather
-than obeyed.
+- **Health Check Endpoint**: `/api/health` reports system status for AI providers, search engines, and MongoDB connection.
 
-Three things make it usable as a gate rather than a curiosity:
+For complete deployment step-by-step instructions, see [DEPLOY.md](file:///c:/Users/Gajanand/OneDrive/Desktop/ideaforge/DEPLOY.md).
 
-- **Variance is handled.** `--repeat=3` scores each check by majority and reports anything
-  that disagreed with itself as *flaky* instead of counting it either way.
-- **Regressions beat absolutes.** The pass/fail decision is made against a stored baseline.
-  "83% passed" says nothing; "two checks that passed yesterday fail today" is the sentence
-  that should stop a deploy.
-- **A run that couldn't reach the model reports nothing.** Provider outages — no credit,
-  bad key, rate limit — abort the run with the provider's own message and exit `2`, leaving
-  the baseline untouched. Without this the harness invents findings: an API key running out
-  mid-run once produced a confident "59%, locale is broken" when nothing was wrong.
+---
 
-```bash
-EVAL_COOKIE="ideaforge_session=…" npm run eval            # all 30 cases
-EVAL_COOKIE="…" npm run eval:fast                         # deploy gate, no live search
-EVAL_COOKIE="…" npm run eval -- --tag=grounding --repeat=3
-EVAL_COOKIE="…" npm run eval:baseline                     # record the current run
-```
+## 💼 Resume Highlights (3 Simple Bullet Points)
 
-## Stack
+Add these high-impact bullet points to your resume under your Projects / Experience section:
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · streaming API routes.
+- **Architected Full-Stack AI Research Platform**: Built **IdeaForge** using **Next.js 16**, **React 19**, and **MongoDB Atlas** to automate startup and hackathon project research, delivering validated problem severity scores, technical build plans, and multi-format document exports (`.pptx`, `.docx`, PDF) in under 4 minutes.
+- **Engineered Citation-Grounded LLM Pipeline**: Integrated **Claude 3.5 Sonnet** and **Tavily Search API** with custom verification logic that prevents link hallucination by strictly constraining AI references to real web search results and auto-pruning off-topic sources.
+- **Implemented Real-Time Sync & Multi-API Integrations**: Developed real-time multi-user workspace synchronization using **Server-Sent Events (SSE)**, connected external APIs (**GitHub**, **Kaggle**, **CORE**) for automated resource discovery, and built a **Telegram bot agent** for remote project tracking and scheduled notifications.
