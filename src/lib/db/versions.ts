@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { col } from "./index";
-import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
+import type { ProjectPlan, ResearchReport } from "@/lib/pipeline/types";
 
 // ---------------------------------------------------------------------------
 // Project version history.

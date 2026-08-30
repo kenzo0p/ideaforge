@@ -6,7 +6,7 @@ import { getUserById, type User } from "./users";
 // Telegram account linking.
 //
 // A short-lived code generated in the app is sent to the bot (via a t.me deep
-// link); the bot exchanges it to bind the Telegram chat to an IdeaForge user.
+// link); the bot exchanges it to bind the Telegram chat to an Scrutan user.
 // ---------------------------------------------------------------------------
 
 const CODE_TTL_MS = 1000 * 60 * 15; // 15 minutes

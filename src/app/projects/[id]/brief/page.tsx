@@ -40,7 +40,7 @@ export default async function BriefPage({ params }: { params: Promise<{ id: stri
         <PrintTrigger />
       </div>
 
-      <article className="prose-insights print-body text-[15px]">
+      <article className="prose-brief print-body text-[15px]">
         <MarkdownView>{markdown}</MarkdownView>
       </article>
     </div>

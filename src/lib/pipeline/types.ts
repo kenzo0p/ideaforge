@@ -1,14 +1,14 @@
 // ---------------------------------------------------------------------------
-// iNSIGHTS Layer 2 — domain model
+// Scrutan pipeline — domain model
 //
-// These types describe the outputs of the Layer 2 capabilities the copilot
-// exposes. They are provider-agnostic: today they're produced by an LLM (or the
-// Mock), tomorrow by the real iNSIGHTS Layer 2 API — feature/UI code depends on
-// these shapes, never on how they were produced.
+// These types describe the outputs of each stage of the pipeline. They are
+// provider-agnostic: today they're produced by an LLM (or the Mock), tomorrow
+// by something else entirely — feature/UI code depends on these shapes, never
+// on how they were produced.
 // ---------------------------------------------------------------------------
 
-/** The Layer 2 capabilities from the track brief, plus problem discovery. */
-export type Layer2Capability =
+/** The stages a project idea can be put through. */
+export type Capability =
   | "problem-discovery"
   | "deep-search"
   | "project-hub"
@@ -214,6 +214,16 @@ export interface Milestone {
   goal: string;
   tasks: string[];
   deliverable: string;
+  /** Weeks of work. Optional: plans saved before scheduling existed have none. */
+  durationWeeks?: number;
+  /**
+   * Indices of the milestones this cannot start before.
+   *
+   * Indices into this same array rather than names, because a model asked for
+   * names will eventually produce one that does not match any milestone, and a
+   * dangling string is harder to report usefully than an out-of-range number.
+   */
+  dependsOn?: number[];
 }
 
 export interface ApiRecommendation {

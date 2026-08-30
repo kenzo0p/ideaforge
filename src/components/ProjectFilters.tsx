@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import ProjectCard from "@/components/ProjectCard";
+import type { GroundingSummary } from "@/lib/db/grounding";
 import type { ProjectSummary } from "@/lib/db/projects";
 
 export type SortKey = "recent" | "alpha";
@@ -19,10 +20,13 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
 export default function ProjectFilters({
   projects,
   doneCounts,
+  grounding,
 }: {
   projects: ProjectSummary[];
   /** Completed-milestone counts keyed by project id. */
   doneCounts: Record<string, number>;
+  /** Verification summaries keyed by project id; missing means never checked. */
+  grounding: Record<string, GroundingSummary>;
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -101,7 +105,12 @@ export default function ProjectFilters({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((p) => (
-            <ProjectCard key={p.id} project={p} doneMilestones={doneCounts[p.id] ?? 0} />
+            <ProjectCard
+              key={p.id}
+              project={p}
+              doneMilestones={doneCounts[p.id] ?? 0}
+              grounding={grounding[p.id]}
+            />
           ))}
         </div>
       )}

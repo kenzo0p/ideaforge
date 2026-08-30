@@ -29,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "Content-Disposition": `attachment; filename="ideaforge-${slugify(project.title)}.docx"`,
+      "Content-Disposition": `attachment; filename="scrutan-${slugify(project.title)}.docx"`,
       "Cache-Control": "no-store",
     },
   });

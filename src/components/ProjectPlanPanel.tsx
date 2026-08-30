@@ -9,8 +9,9 @@ import {
   Plug,
   Rocket,
 } from "lucide-react";
+import PlanSchedule from "@/components/PlanSchedule";
 import { toggleMilestoneAction } from "@/lib/actions";
-import type { ProjectPlan } from "@/lib/insights/types";
+import type { ProjectPlan } from "@/lib/pipeline/types";
 
 export default function ProjectPlanPanel({
   plan,
@@ -111,6 +112,9 @@ export default function ProjectPlanPanel({
       {/* Timeline / milestones */}
       {plan.milestones.length > 0 && (
         <Section icon={<MilestoneIcon className="size-4 text-brand" />} title="Roadmap & timeline">
+          {/* Above the milestones, because whether the schedule holds together
+              changes how the list below should be read. */}
+          <PlanSchedule milestones={plan.milestones} />
           {/* Progress summary — only for saved projects (tracking needs an id). */}
           {projectId && plan.milestones.length > 0 && (
             <div className="mb-4 flex items-center gap-3">

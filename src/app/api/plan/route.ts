@@ -3,9 +3,9 @@ import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider } from "@/lib/search";
-import { getLayer2 } from "@/lib/insights/layer2";
+import { getPipeline } from "@/lib/pipeline";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
-import type { ResearchReport } from "@/lib/insights/types";
+import type { ResearchReport } from "@/lib/pipeline/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const plan = await getLayer2().projectHub(
+    const plan = await getPipeline().projectHub(
       { idea, locale: body.locale },
       body.research ?? null,
       req.signal,

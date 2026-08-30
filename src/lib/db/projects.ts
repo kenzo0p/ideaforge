@@ -2,7 +2,11 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { col } from "./index";
 import { canMentorView } from "./orgs";
 import { purgeVersions, recordVersion } from "./versions";
-import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
+import { indexProject, removeFromIndex } from "./similar";
+import { purgeGrounding } from "./grounding";
+import { purgeClaims } from "./claims";
+import { purgeSnapshots } from "./snapshots";
+import type { ProjectPlan, ResearchReport } from "@/lib/pipeline/types";
 
 // ---------------------------------------------------------------------------
 // Project + Research Workspace repository
@@ -170,6 +174,14 @@ export async function createProject(input: SaveProjectInput): Promise<Project> {
     updatedAt: now,
   };
   await (await projects()).insertOne(doc);
+  // Indexed in the background: the vector is a nice-to-have, and nobody should
+  // wait on an embedding to finish saving their project.
+  void indexProject({
+    projectId: doc._id,
+    userId: input.userId,
+    title: input.title,
+    idea: input.idea,
+  });
   return toProject(doc);
 }
 
@@ -216,6 +228,13 @@ export async function updateProjectArtifacts(
   });
 
   await c.updateOne({ _id: id, userId }, { $set: { ...next, updatedAt: Date.now() } });
+
+  // Re-index only when the embedded text actually changed. This path never
+  // writes `idea` — only the title can move here — so the stored idea is still
+  // the current one and re-embedding on every artifact save would be waste.
+  if (before.title !== next.title) {
+    void indexProject({ projectId: id, userId, title: next.title, idea: before.idea });
+  }
 }
 
 /** Fetch a project if `userId` owns it or was invited onto it. */
@@ -375,6 +394,10 @@ export async function deleteProject(id: string, userId: string): Promise<void> {
     (await col("watches")).deleteMany({ projectId: id }),
     (await col("watchFindings")).deleteMany({ projectId: id }),
     purgeVersions(id),
+    removeFromIndex(id),
+    purgeGrounding(id),
+    purgeClaims(id),
+    purgeSnapshots(id),
   ]);
 }
 
@@ -460,6 +483,10 @@ export async function setListed(
   const project = await getProject(id, userId);
   if (!project) return false;
   if (listed && (!project.shareToken || !project.validationMarkdown)) return false;
+  // Never into a search index. Demo output carries invented citations, and a
+  // fabricated arXiv link indexed under this product's name is a far worse
+  // outcome than an unlisted brief.
+  if (listed && isDemoDerived(project)) return false;
 
   await (await projects()).updateOne(
     { _id: id, userId },
@@ -470,7 +497,41 @@ export async function setListed(
   return true;
 }
 
+/**
+ * Was any of this produced by the offline Mock provider?
+ *
+ * The mock fabricates plausible-looking sources — arxiv.org/abs/2404.<hash>,
+ * github.com/opensource/<slug> — which is fine for a local demo and completely
+ * unacceptable on a page a stranger can find. Derived from the artifacts rather
+ * than stored, so it is always right and needs no backfill for projects saved
+ * before this existed.
+ */
+export function isDemoDerived(p: {
+  research?: ResearchReport | null;
+  plan?: ProjectPlan | null;
+}): boolean {
+  return p.research?.demo === true || p.plan?.demo === true;
+}
+
+/**
+ * Is this brief actually eligible for a search index right now?
+ *
+ * The stored `listed` flag is an intent, not a verdict: a project listed before
+ * the demo rule existed still carries it. Every public surface asks this
+ * instead, so the rule is enforced where the page is rendered rather than only
+ * where the directory is queried.
+ */
+export function isPubliclyListed(p: {
+  listed: boolean;
+  research?: ResearchReport | null;
+  plan?: ProjectPlan | null;
+}): boolean {
+  return p.listed && !isDemoDerived(p);
+}
+
 export interface PublicBrief {
+  /** Needed to look up the brief's verification result, which is stored apart. */
+  id: string;
   token: string;
   title: string;
   idea: string;
@@ -484,7 +545,10 @@ export interface PublicBrief {
 export async function listPublicBriefs(limit = 60): Promise<PublicBrief[]> {
   const rows = await (await projects())
     .find(
-      { listed: true, shareToken: { $exists: true } },
+      // The demo exclusion is repeated here on purpose: anything listed before
+      // the rule existed drops out of the directory and the sitemap without
+      // needing a migration to find it.
+      { listed: true, shareToken: { $exists: true }, "research.demo": { $ne: true }, "plan.demo": { $ne: true } },
       {
         projection: {
           title: 1,
@@ -502,6 +566,7 @@ export async function listPublicBriefs(limit = 60): Promise<PublicBrief[]> {
     .toArray();
 
   return rows.map((d) => ({
+    id: d._id,
     token: d.shareToken!,
     title: d.title,
     idea: d.idea,

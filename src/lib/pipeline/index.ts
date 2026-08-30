@@ -28,7 +28,7 @@ import type {
   DocumentReview,
   IdeaInput,
   KnowledgeCluster,
-  Layer2Capability,
+  Capability,
   Milestone,
   ProblemDiscovery,
   ProjectPlan,
@@ -45,16 +45,16 @@ import type {
 } from "./types";
 
 // ---------------------------------------------------------------------------
-// iNSIGHTS Layer 2 service
+// The Scrutan pipeline
 //
-// The single seam between the copilot's features and whatever powers them. Each
-// method maps to a Layer 2 capability from the track brief. Swapping in the real
-// Layer 2 API means changing only this file.
+// The single seam between the product's features and whatever powers them. Each
+// method is one stage an idea passes through, from validation to a build plan.
+// Changing what powers a stage means changing only this file.
 // ---------------------------------------------------------------------------
 
-export interface Layer2Service {
+export interface ScrutanPipeline {
   /** Which capabilities are live — drives UI badges and the roadmap. */
-  readonly capabilities: Record<Layer2Capability, boolean>;
+  readonly capabilities: Record<Capability, boolean>;
 
   /** Stream a citation-free problem validation (Part 1). */
   validateProblem(input: IdeaInput, signal?: AbortSignal): AsyncIterable<string>;
@@ -82,8 +82,8 @@ export interface Layer2Service {
   ): Promise<ProjectPlan>;
 }
 
-class DefaultLayer2 implements Layer2Service {
-  readonly capabilities: Record<Layer2Capability, boolean> = {
+class DefaultPipeline implements ScrutanPipeline {
+  readonly capabilities: Record<Capability, boolean> = {
     "problem-discovery": true,
     "deep-search": true,
     "web-intelligence": true,
@@ -594,9 +594,9 @@ function repairTruncatedJson(s: string): string | null {
   return str;
 }
 
-let instance: Layer2Service | null = null;
+let instance: ScrutanPipeline | null = null;
 
-export function getLayer2(): Layer2Service {
-  if (!instance) instance = new DefaultLayer2();
+export function getPipeline(): ScrutanPipeline {
+  if (!instance) instance = new DefaultPipeline();
   return instance;
 }

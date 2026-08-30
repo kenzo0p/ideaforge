@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowRight, ExternalLink, Loader2, Plus, Scale, Trophy, X } from "lucide-react";
 import { USAGE_EVENT } from "@/components/UsageMeter";
 import UpgradePrompt, { parseLimitError } from "@/components/UpgradePrompt";
-import type { IdeaComparison, IdeaScores, RankedIdea } from "@/lib/insights/types";
+import type { IdeaComparison, IdeaScores, RankedIdea } from "@/lib/pipeline/types";
 
 const MAX_IDEAS = 3;
 const AXES: { key: keyof IdeaScores; label: string; hint: string }[] = [
@@ -104,10 +104,10 @@ function IdeaColumn({ item, isWinner }: { item: RankedIdea; isWinner: boolean })
  * numbers, so the recommendation is always explained by the bars above it.
  */
 export default function ComparePanel({
-  onForge,
+  onScrutinise,
   locale,
 }: {
-  onForge: (idea: string) => void;
+  onScrutinise: (idea: string) => void;
   locale: string;
 }) {
   const [ideas, setIdeas] = useState<string[]>(["", ""]);
@@ -250,10 +250,10 @@ export default function ComparePanel({
             </div>
             <p className="text-sm leading-relaxed">{result.rationale}</p>
             <button
-              onClick={() => onForge(winner.idea)}
+              onClick={() => onScrutinise(winner.idea)}
               className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-solid px-3.5 py-1.5 text-sm font-semibold text-on-brand transition hover:opacity-90"
             >
-              Forge this one <ArrowRight className="size-3.5" />
+              Scrutinise this one <ArrowRight className="size-3.5" />
             </button>
           </div>
 

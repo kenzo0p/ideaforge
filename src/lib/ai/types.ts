@@ -2,7 +2,7 @@
 // AI provider abstraction
 //
 // Everything in the app talks to `AIProvider`, never to a concrete SDK. This is
-// what lets us swap the underlying model — or the real iNSIGHTS Layer 2 API —
+// what lets us swap the underlying model — or the whole provider —
 // without touching feature code. A Mock provider implements the same interface
 // so the whole product runs end-to-end with zero API keys during development.
 // ---------------------------------------------------------------------------

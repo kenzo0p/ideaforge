@@ -10,12 +10,12 @@ import {
   Search,
   type LucideIcon,
 } from "lucide-react";
-import type { Layer2Capability } from "./types";
+import type { Capability } from "./types";
 
-// UI metadata for the iNSIGHTS Layer 2 capabilities. `part` marks which build
-// phase delivered it — the landing page renders this as a live roadmap.
+// UI metadata for the pipeline stages the landing page advertises. `part`
+// records which build phase delivered it; it is history, not a roadmap.
 export interface CapabilityMeta {
-  id: Layer2Capability;
+  id: Capability;
   icon: LucideIcon;
   title: string;
   blurb: string;

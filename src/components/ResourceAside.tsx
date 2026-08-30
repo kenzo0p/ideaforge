@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Database, ExternalLink, FileText, GitBranch, MonitorPlay, Play } from "lucide-react";
-import type { Resource, ResearchResources, VideoResource } from "@/lib/insights/types";
+import type { Resource, ResearchResources, VideoResource } from "@/lib/pipeline/types";
 
 /**
  * A YouTube result rendered as a thumbnail that becomes a player on click.

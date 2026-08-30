@@ -13,7 +13,7 @@ export default async function SiteHeader() {
         <Link href="/" className="flex items-center gap-2 font-bold">
           <Sparkles className="size-4 text-brand" />
           <span className="bg-gradient-to-r from-brand to-brand-2 bg-clip-text text-transparent">
-            IdeaForge
+            Scrutan
           </span>
         </Link>
         <nav className="flex items-center gap-1 text-sm">

@@ -28,7 +28,8 @@ import ComparePanel from "@/components/ComparePanel";
 import { USAGE_EVENT } from "@/components/UsageMeter";
 import { saveProjectAction } from "@/lib/actions";
 import UpgradePrompt, { parseLimitError } from "@/components/UpgradePrompt";
-import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
+import SimilarIdeas from "@/components/SimilarIdeas";
+import type { ProjectPlan, ResearchReport } from "@/lib/pipeline/types";
 
 // Multilingual: BCP-47 locales the copilot can respond in.
 const LANGUAGES: Array<{ code: string; label: string }> = [
@@ -350,7 +351,7 @@ export default function IdeaConsole({
       {mode === "compare" && (
         <ComparePanel
           locale={locale}
-          onForge={(idea) => {
+          onScrutinise={(idea) => {
             setMode("idea");
             analyze(idea);
           }}
@@ -360,7 +361,7 @@ export default function IdeaConsole({
       {mode === "discover" && (
         <DiscoverPanel
           locale={locale}
-          onForge={(starter) => {
+          onScrutinise={(starter) => {
             setMode("idea");
             analyze(starter);
           }}
@@ -471,6 +472,12 @@ export default function IdeaConsole({
 
           {/* A plan refusal from any stage lands here, above the tabs, where
               the user is already looking. */}
+          {/* Duplicate check runs on the idea itself, so it can warn before the
+              research and plan stages are ever paid for. */}
+          {analyzedIdea && isAuthed && (
+            <SimilarIdeas text={analyzedIdea} excludeProjectId={savedId ?? undefined} />
+          )}
+
           {limitHit && (
             <UpgradePrompt
               reason={limitHit.reason}
@@ -483,7 +490,7 @@ export default function IdeaConsole({
           {/* --- Validation tab --- */}
           {tab === "validation" && (
             <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <div className={`prose-insights max-w-[72ch] text-[15px] ${streaming ? "caret" : ""}`}>
+              <div className={`prose-brief max-w-[72ch] text-[15px] ${streaming ? "caret" : ""}`}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
               </div>
               {status === "done" && research === "idle" && (

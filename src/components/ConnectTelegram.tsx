@@ -5,7 +5,7 @@ import { Check, ExternalLink, Loader2, Send } from "lucide-react";
 import { connectTelegramAction, unlinkTelegramAction } from "@/lib/actions";
 
 // "Connect Telegram" control for the dashboard. Mints a deep link the user taps
-// to bind their Telegram chat to their IdeaForge account.
+// to bind their Telegram chat to their Scrutan account.
 export default function ConnectTelegram({ linked }: { linked: boolean }) {
   const [pending, startTransition] = useTransition();
   const [deepLink, setDeepLink] = useState<string | null>(null);

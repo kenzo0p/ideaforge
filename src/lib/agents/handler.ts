@@ -1,7 +1,7 @@
 import { getProvider } from "@/lib/ai";
 import { getProject, listProjects, type Project } from "@/lib/db/projects";
-import { agentReplyMessages } from "@/lib/insights/prompts";
-import { projectNextStep } from "@/lib/insights/next-step";
+import { agentReplyMessages } from "@/lib/pipeline/prompts";
+import { projectNextStep } from "@/lib/pipeline/next-step";
 
 // ---------------------------------------------------------------------------
 // AI Agent — channel-agnostic message handler
@@ -30,7 +30,7 @@ export interface AgentInput {
   buttons?: { text: string; data: string }[][];
 }
 
-const HELP = `🤖 *IdeaForge Agent*
+const HELP = `🤖 *Scrutan Agent*
 I help you move projects forward. Try:
 • /projects — list your projects, then tap one to pick it
 • /status — where the current project stands
@@ -59,14 +59,14 @@ export async function handleAgentMessage(input: AgentInput): Promise<string> {
   // Project data requires an authenticated user (the console passes userId).
   if (!input.userId) {
     return input.channel === "telegram"
-      ? "🔒 Connect your account first: open IdeaForge → *Connect Telegram* and tap the link, then come back."
-      : "🔒 Connect your IdeaForge account to ask about your projects. Sign in at the app to continue.";
+      ? "🔒 Connect your account first: open Scrutan → *Connect Telegram* and tap the link, then come back."
+      : "🔒 Connect your Scrutan account to ask about your projects. Sign in at the app to continue.";
   }
 
   const projects = (await listProjects(input.userId)).slice(0, 10);
 
   if (cmd === "/projects" || cmd === "projects" || cmd.startsWith("list")) {
-    if (projects.length === 0) return "You have no saved projects yet. Create one in IdeaForge first.";
+    if (projects.length === 0) return "You have no saved projects yet. Create one in Scrutan first.";
     const current = input.projectId;
     const lines = projects
       .map((p) => `• ${p.id === current ? "*" + p.title + "* ← current" : p.title}`)
@@ -104,7 +104,7 @@ export async function handleAgentMessage(input: AgentInput): Promise<string> {
     const hint =
       projects.length > 0
         ? "Send /projects and tap one to pick it."
-        : "You have no saved projects yet — create one in IdeaForge first.";
+        : "You have no saved projects yet — create one in Scrutan first.";
     return cmd.startsWith("/")
       ? `No project selected. ${hint}`
       : `I answer questions about one project at a time. ${hint}`;

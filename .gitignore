@@ -40,7 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# IdeaForge SQLite data
+# Scrutan SQLite data
 /data
 *.db
 *.db-*
+
+# Working document, kept local
+SYNOPSIS.md

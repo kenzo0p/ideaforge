@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Compass, FileText, Rocket, Search, Sparkles } from "lucide-react";
+import GroundingBadge from "@/components/GroundingBadge";
 import { listPublicBriefs } from "@/lib/db/projects";
+import { getGroundingScores } from "@/lib/db/grounding";
 import { publicUrl } from "@/lib/http/origin";
 import { timeAgo } from "@/lib/format";
 
@@ -10,12 +12,12 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   const url = await publicUrl("/explore");
   const description =
-    "Public project briefs from IdeaForge — validated problems, citation-backed research, and build plans, published by the people who made them.";
+    "Public project briefs from Scrutan — validated problems, citation-backed research, and build plans, published by the people who made them.";
   return {
-    title: "Explore public briefs — IdeaForge",
+    title: "Explore public briefs — Scrutan",
     description,
     alternates: { canonical: url },
-    openGraph: { title: "Explore public briefs", description, url, siteName: "IdeaForge" },
+    openGraph: { title: "Explore public briefs", description, url, siteName: "Scrutan" },
   };
 }
 
@@ -29,6 +31,9 @@ export async function generateMetadata(): Promise<Metadata> {
  */
 export default async function ExplorePage() {
   const briefs = await listPublicBriefs();
+  // Browsing a directory of briefs, the useful sort signal is not which is
+  // newest but which is actually backed by sources that exist.
+  const grounding = await getGroundingScores(briefs.map((b) => b.id));
 
   return (
     <main className="mx-auto w-full max-w-4xl px-5 py-10">
@@ -64,6 +69,15 @@ export default async function ExplorePage() {
               >
                 <h2 className="text-sm font-semibold group-hover:text-brand">{b.title}</h2>
                 <p className="mt-1 line-clamp-3 flex-1 text-xs text-muted">{b.idea}</p>
+                {grounding[b.id] && (
+                  <p className="mt-2.5">
+                    <GroundingBadge
+                      score={grounding[b.id].groundingScore}
+                      verified={grounding[b.id].verified}
+                      total={grounding[b.id].total}
+                    />
+                  </p>
+                )}
                 <p className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted">
                   {b.hasResearch && (
                     <span className="inline-flex items-center gap-1">

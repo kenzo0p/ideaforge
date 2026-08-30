@@ -164,47 +164,47 @@ body {
 }
 
 /* Markdown output styling for the analysis panel */
-.prose-insights h1 {
+.prose-brief h1 {
   font-size: 1.3rem;
   font-weight: 700;
   margin: 1rem 0 0.5rem;
 }
-.prose-insights h2 {
+.prose-brief h2 {
   font-size: 1.2rem;
   font-weight: 700;
   margin: 1rem 0 0.5rem;
 }
-.prose-insights h3 {
+.prose-brief h3 {
   font-size: 1rem;
   font-weight: 600;
   margin: 1.1rem 0 0.4rem;
   color: var(--brand);
 }
-.prose-insights p {
+.prose-brief p {
   margin: 0.5rem 0;
   line-height: 1.65;
 }
-.prose-insights ul {
+.prose-brief ul {
   margin: 0.4rem 0;
   padding-left: 1.2rem;
   list-style: disc;
 }
-.prose-insights li {
+.prose-brief li {
   margin: 0.25rem 0;
   line-height: 1.55;
 }
-.prose-insights blockquote {
+.prose-brief blockquote {
   border-left: 3px solid var(--brand);
   padding: 0.2rem 0 0.2rem 0.9rem;
   margin: 0.7rem 0;
   color: var(--muted);
   font-style: italic;
 }
-.prose-insights strong {
+.prose-brief strong {
   color: var(--foreground);
   font-weight: 650;
 }
-.prose-insights code {
+.prose-brief code {
   background: color-mix(in srgb, var(--brand) 12%, transparent);
   padding: 0.1rem 0.35rem;
   border-radius: 0.3rem;

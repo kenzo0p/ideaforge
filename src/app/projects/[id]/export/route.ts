@@ -37,7 +37,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       ...(inline
         ? {}
         : {
-            "Content-Disposition": `attachment; filename="ideaforge-${slugify(project.title)}.md"`,
+            "Content-Disposition": `attachment; filename="scrutan-${slugify(project.title)}.md"`,
           }),
       "Cache-Control": "no-store",
     },

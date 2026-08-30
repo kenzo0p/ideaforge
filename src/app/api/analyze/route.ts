@@ -2,7 +2,7 @@ import { classifyFailure } from "@/lib/health/failures";
 import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
-import { getLayer2 } from "@/lib/insights/layer2";
+import { getPipeline } from "@/lib/pipeline";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 
 export const runtime = "nodejs";
@@ -32,13 +32,13 @@ export async function POST(req: Request) {
     return Response.json({ error: "Idea is too long (max 2000 chars)." }, { status: 400 });
   }
 
-  const layer2 = getLayer2();
+  const pipeline = getPipeline();
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const chunk of layer2.validateProblem({ idea, locale: body.locale }, req.signal)) {
+        for await (const chunk of pipeline.validateProblem({ idea, locale: body.locale }, req.signal)) {
           controller.enqueue(encoder.encode(chunk));
         }
       } catch (err) {

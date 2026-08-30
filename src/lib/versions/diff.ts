@@ -1,4 +1,4 @@
-import type { ProjectPlan, ResearchReport } from "@/lib/insights/types";
+import type { ProjectPlan, ResearchReport } from "@/lib/pipeline/types";
 
 // ---------------------------------------------------------------------------
 // Comparing two versions of a project.

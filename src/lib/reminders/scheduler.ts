@@ -7,7 +7,7 @@ import {
 import { getProject } from "@/lib/db/projects";
 import { getChatIdForUser } from "@/lib/db/telegram";
 import { sendTelegramMessage } from "@/lib/agents/telegram";
-import { projectNextStep } from "@/lib/insights/next-step";
+import { projectNextStep } from "@/lib/pipeline/next-step";
 
 // ---------------------------------------------------------------------------
 // Reminder delivery.
@@ -18,7 +18,7 @@ import { projectNextStep } from "@/lib/insights/next-step";
 //   • the /api/cron/reminders route on serverless (Vercel Cron)
 // ---------------------------------------------------------------------------
 
-const g = globalThis as unknown as { __ideaforgeReminderScheduler?: boolean };
+const g = globalThis as unknown as { __scrutanReminderScheduler?: boolean };
 const TICK_MS = 60_000;
 /**
  * Reminders are not urgent, and firing one the instant the process boots means
@@ -29,15 +29,18 @@ const TICK_MS = 60_000;
 const FIRST_TICK_MS = 30_000;
 
 export function startReminderScheduler(): void {
-  if (g.__ideaforgeReminderScheduler) return;
-  g.__ideaforgeReminderScheduler = true;
+  if (g.__scrutanReminderScheduler) return;
+  g.__scrutanReminderScheduler = true;
   console.log("⏰ Reminder scheduler started.");
   const tick = async () => {
     await runDueReminders();
-    // Watches share the timer: both are "do the due work" and neither is
-    // urgent, so a second interval would just be more moving parts.
+    // Watches and re-verification share the timer: all three are "do the due
+    // work" and none is urgent, so more intervals would just be more moving
+    // parts. Each one bounds its own batch size.
     const { runDueWatches } = await import("@/lib/watch/runner");
     await runDueWatches();
+    const { runDueRevalidations } = await import("@/lib/verify/decay");
+    await runDueRevalidations();
   };
   setTimeout(() => {
     void tick();

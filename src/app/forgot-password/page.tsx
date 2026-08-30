@@ -15,7 +15,7 @@ export default async function ForgotPasswordPage() {
         <div className="mb-3 inline-flex items-center gap-2 text-lg font-bold">
           <Sparkles className="size-5 text-brand" />
           <span className="bg-gradient-to-r from-brand to-brand-2 bg-clip-text text-transparent">
-            IdeaForge
+            Scrutan
           </span>
         </div>
         <h1 className="text-2xl font-bold">Forgot your password?</h1>

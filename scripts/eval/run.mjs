@@ -8,6 +8,7 @@
 //   npm run eval -- --repeat=3                # majority vote, for flaky checks
 //   npm run eval -- --update-baseline         # record this run as the baseline
 //   npm run eval -- --json=report.json        # machine-readable artifact
+//   npm run eval -- --publish                 # publish the scoreboard to the site
 //   npm run eval -- --base=https://ideaforge-2e1m.onrender.com
 //
 // Everything else in this repo tests that the code works. This tests whether
@@ -28,7 +29,7 @@
 //     is the sentence that should stop a deploy.
 //
 // Needs a running server and a session cookie:
-//   EVAL_COOKIE="ideaforge_session=…" npm run eval
+//   EVAL_COOKIE="scrutan_session=…" npm run eval
 // ---------------------------------------------------------------------------
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -45,6 +46,8 @@ const COOKIE = process.env.EVAL_COOKIE ?? "";
 const REPEAT = Math.max(1, Number(args.repeat ?? 1));
 const CONCURRENCY = Math.max(1, Number(args.concurrency ?? 3));
 const BASELINE_PATH = new URL("./baseline.json", import.meta.url);
+/** Where the public scoreboard lives, read by the /quality page. */
+const PUBLIC_PATH = new URL("../../src/data/eval-report.json", import.meta.url);
 
 const golden = JSON.parse(readFileSync(new URL("./golden-set.json", import.meta.url), "utf8"));
 
@@ -56,7 +59,7 @@ if (args.tag) {
 }
 
 if (!COOKIE) {
-  console.error("EVAL_COOKIE is required (a signed-in ideaforge_session cookie).");
+  console.error("EVAL_COOKIE is required (a signed-in scrutan_session cookie).");
   process.exit(1);
 }
 if (cases.length === 0) {
@@ -504,6 +507,58 @@ if (args.json) {
     `${JSON.stringify({ ranAt: new Date().toISOString(), base: BASE, pct, results, regressed }, null, 2)}\n`,
   );
   console.log(`${c.dim}Report written to ${args.json}${c.off}`);
+}
+
+// --- The public scoreboard -------------------------------------------------
+//
+// An AI product that publishes its own failure rate is making a claim its
+// competitors cannot copy without publishing theirs. The harness already knows
+// the number; the only thing that made it private was that nobody wrote it out.
+//
+// Sanitised on the way out, and the sanitising is the point rather than an
+// afterthought. The internal `--base` URL, the raw model output and the failure
+// details all stay here: a scoreboard is a claim about quality, not an invitation
+// to read someone's staging host out of a JSON file.
+if (args.publish) {
+  if (REPEAT < 2) {
+    console.log(`\n${c.warn}Not publishing: --publish needs --repeat=2 or more.${c.off}`);
+    console.log(`${c.dim}A single run cannot separate a real failure from a flaky one, and publishing one as the other is the mistake this whole harness exists to prevent.${c.off}`);
+  } else if (cases.length < golden.cases.length) {
+    console.log(`\n${c.warn}Not publishing: this was a filtered run (${cases.length} of ${golden.cases.length} cases).${c.off}`);
+    console.log(`${c.dim}A scoreboard built from a chosen subset is a marketing number, not a measurement.${c.off}`);
+  } else {
+    const dimensions = [...byTag]
+      .sort()
+      .map(([tag, s]) => ({
+        tag,
+        description: golden.tags?.[tag] ?? "",
+        passed: s.pass,
+        total: s.total,
+      }))
+      .filter((d) => d.total > 0);
+
+    writeFileSync(
+      PUBLIC_PATH,
+      `${JSON.stringify(
+        {
+          ranAt: new Date().toISOString(),
+          repeats: REPEAT,
+          cases: cases.length,
+          checks: { passed: scored - failed.length, scored, flaky: flaky.length },
+          pct,
+          dimensions,
+          // Named so a reader can see which questions were asked, without the
+          // answers. The failing ones are listed too — a scoreboard that showed
+          // only passes would be the flattery this product exists to refuse.
+          failing: failed.map((r) => ({ caseId: r.caseId, label: r.label })),
+          flakyChecks: flaky.map((r) => ({ caseId: r.caseId, label: r.label })),
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    console.log(`\n${c.dim}Public scoreboard written to src/data/eval-report.json${c.off}`);
+  }
 }
 
 // Fail on a regression against the baseline, or on an outright collapse. The

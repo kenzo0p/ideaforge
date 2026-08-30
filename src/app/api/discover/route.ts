@@ -3,7 +3,7 @@ import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider } from "@/lib/search";
-import { getLayer2 } from "@/lib/insights/layer2";
+import { getPipeline } from "@/lib/pipeline";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 
 export const runtime = "nodejs";
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await getLayer2().discoverProblems(
+    const result = await getPipeline().discoverProblems(
       { domain: body.domain, locale: body.locale },
       req.signal,
     );

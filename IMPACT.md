@@ -1,8 +1,8 @@
-# IdeaForge — impact, differentiation, and revenue
+# Scrutan — impact, differentiation, and revenue
 
 Live: <https://ideaforge-2e1m.onrender.com>
 
-> **Status, stated plainly.** IdeaForge is a working, deployed product with real
+> **Status, stated plainly.** Scrutan is a working, deployed product with real
 > users possible today. It has **no paying customers and no revenue yet**. The
 > figures in [§4](#4-revenue-model) are a model built from measured costs, not
 > results — every assumption is labelled. The claims in
@@ -32,7 +32,7 @@ building something that already exists.
 
 ### Who it changes things for
 
-| Audience | Today | With IdeaForge |
+| Audience | Today | With Scrutan |
 |---|---|---|
 | **Students** (hackathons, capstones, first research project) | Pick an idea on instinct, discover the incumbent in week three | Know the competitive landscape before committing a weekend |
 | **First-time founders** | Validate by asking friends, who are polite | A severity score, named incumbents, and cited gaps |
@@ -58,7 +58,7 @@ remaining weeks are worth spending.
 ### The impact that matters most
 
 Most tools in this space are optimised to make you feel good about your idea.
-IdeaForge will tell you an idea is weak. In testing, asked to compare three
+Scrutan will tell you an idea is weak. In testing, asked to compare three
 ideas, it scored a water-reminder app **2/10 on severity, 1/10 on
 differentiation** and wrote *"Not worth building — the problem is mild, the
 market is saturated."*
@@ -72,7 +72,7 @@ the wrong project well.**
 
 ### Against the alternatives
 
-| | ChatGPT / Claude | Perplexity | Elicit / Consensus | Notion AI | **IdeaForge** |
+| | ChatGPT / Claude | Perplexity | Elicit / Consensus | Notion AI | **Scrutan** |
 |---|---|---|---|---|---|
 | Cited, checkable sources | ✗ invented links | ✓ | ✓ papers only | ✗ | ✓ |
 | Says an idea is *not* worth building | rarely | ✗ | ✗ | ✗ | **✓ scored** |
@@ -195,24 +195,31 @@ affordable — but it also means an uncapped free tier is a real financial risk.
 
 Stating these before a judge finds them is worth more than hiding them.
 
-1. **No cumulative spend cap.** Rate limiting is per-minute, not per-day. A
-   single account could run up a substantial bill. This is the first thing to
-   fix before any marketing push.
-2. **No paying users.** Everything in §4 is a model.
-3. **Quality is not yet measured.** Output is good in testing, but there's no
-   evaluation harness scoring it against a golden set — so "it gives good plans"
-   is currently an opinion, not a metric.
-4. **Real-time is single-instance.** The SSE fan-out lives in one process's
+1. **No paying users.** Everything in §4 is a model.
+2. **Real-time is single-instance.** The SSE fan-out lives in one process's
    memory; scaling to multiple instances needs Redis pub/sub.
-5. **Retention is unproven.** The natural usage pattern is intense-then-idle,
+3. **Retention is unproven.** The natural usage pattern is intense-then-idle,
    which is exactly why the institutional tier matters more than the consumer one.
+4. **Verification is a snapshot, not a guarantee.** A source verified today can
+   rot tomorrow, and a paywalled or bot-blocked page reports `unreachable` rather
+   than false — which is honest, but means the grounding score is a floor rather
+   than a verdict.
+5. **Similar-idea detection is workspace-scoped by design.** It cannot tell you
+   that your idea exists on the open internet, only that someone near you has
+   already proposed it.
+
+Two items that were on this list are now closed: **spend** is capped per day per
+plan (`dailyRuns` in `lib/billing/plans.ts`, enforced in `lib/billing/entitlements.ts`)
+rather than only per-minute, and **quality is measured** — `npm run eval` scores 30
+tagged cases against a stored baseline, so "it gives good plans" is a number rather
+than an opinion.
 
 ---
 
 ## 7. The one-paragraph version
 
 > Going from "I have an idea" to "I know whether it's worth building, and here's
-> the plan" takes a researcher one to two weeks. IdeaForge does the first week in
+> the plan" takes a researcher one to two weeks. Scrutan does the first week in
 > four minutes, and shows its sources. Unlike a chatbot, it can't invent a link —
 > every citation comes from a real search result. Unlike research tools, it ends
 > with a build plan, real repos and datasets, and a project your team can work in

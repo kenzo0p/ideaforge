@@ -1,4 +1,4 @@
-import type { VideoResource } from "@/lib/insights/types";
+import type { VideoResource } from "@/lib/pipeline/types";
 import { getSearchProvider, type SearchResult } from "@/lib/search";
 import { cleanVideoTitle, youtubeId } from "./youtube-id";
 

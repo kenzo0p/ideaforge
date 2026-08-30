@@ -1,4 +1,4 @@
-import type { Resource } from "@/lib/insights/types";
+import type { Resource } from "@/lib/pipeline/types";
 import { isGithubConfigured, searchRepos } from "./github";
 import { isKaggleConfigured, searchDatasets } from "./kaggle";
 import { isCoreConfigured, searchPapers } from "./core";

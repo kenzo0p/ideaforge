@@ -128,7 +128,7 @@ export async function createGoogleDoc(input: {
   title: string;
   docx: Buffer;
 }): Promise<{ url: string }> {
-  const boundary = `ideaforge-${Date.now()}`;
+  const boundary = `scrutan-${Date.now()}`;
   const metadata = JSON.stringify({
     name: input.title.slice(0, 200),
     mimeType: "application/vnd.google-apps.document",

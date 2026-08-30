@@ -1,4 +1,4 @@
-# Deploying IdeaForge
+# Deploying Scrutan
 
 Two supported hosts. **Render is the simpler of the two for this app** — it runs
 a persistent Node server, so the Telegram poller and the reminder scheduler work
@@ -161,7 +161,7 @@ Preview). Copy the values from your local `.env.local`:
 | Variable | Value |
 |---|---|
 | `MONGODB_URI` | Atlas → Connect → Drivers |
-| `MONGODB_DB` | optional, defaults to `ideaforge` |
+| `MONGODB_DB` | optional, defaults to `scrutan` |
 | `ANTHROPIC_API_KEY` | your key |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5` |
 

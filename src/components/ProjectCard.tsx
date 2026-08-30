@@ -3,12 +3,17 @@
 import Link from "next/link";
 import { ArrowRight, Globe } from "lucide-react";
 import DeleteProjectButton from "@/components/DeleteProjectButton";
+import GroundingBadge from "@/components/GroundingBadge";
+import type { GroundingSummary } from "@/lib/db/grounding";
 import type { ProjectSummary } from "@/lib/db/projects";
 import { timeAgo } from "@/lib/format";
 
-function nextAction(p: ProjectSummary): string {
+function nextAction(p: ProjectSummary, grounding: GroundingSummary | undefined): string {
   if (!p.hasValidation) return "Validate the idea";
   if (!p.hasResearch) return "Run DeepSearch";
+  // Unverified research outranks a missing plan. Planning on top of sources
+  // that may not exist is the more expensive mistake of the two.
+  if (!grounding) return "Verify the sources";
   if (!p.hasPlan) return "Generate project plan";
   return "Open research workspace";
 }
@@ -16,9 +21,12 @@ function nextAction(p: ProjectSummary): string {
 export default function ProjectCard({
   project: p,
   doneMilestones,
+  grounding,
 }: {
   project: ProjectSummary;
   doneMilestones: number;
+  /** Absent when the project's sources have never been checked. */
+  grounding?: GroundingSummary;
 }) {
   const steps: Array<[string, boolean]> = [
     ["Validation", p.hasValidation],
@@ -44,6 +52,16 @@ export default function ProjectCard({
         </div>
       </div>
       <p className="mt-1 line-clamp-2 text-sm text-muted">{p.idea}</p>
+
+      {p.hasResearch && (
+        <div className="mt-2.5">
+          <GroundingBadge
+            score={grounding?.groundingScore ?? null}
+            verified={grounding?.verified}
+            total={grounding?.total}
+          />
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {steps.map(([label, done]) => (
@@ -85,7 +103,7 @@ export default function ProjectCard({
           href={`/projects/${p.id}`}
           className="inline-flex items-center gap-1 font-medium text-brand opacity-0 transition group-hover:opacity-100"
         >
-          {nextAction(p)} <ArrowRight className="size-3" />
+          {nextAction(p, grounding)} <ArrowRight className="size-3" />
         </Link>
       </div>
     </div>

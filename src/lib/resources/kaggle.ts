@@ -1,4 +1,4 @@
-import type { Resource } from "@/lib/insights/types";
+import type { Resource } from "@/lib/pipeline/types";
 
 // Kaggle dataset search. The KGAT_* API token authenticates as a Bearer token.
 export function isKaggleConfigured(): boolean {

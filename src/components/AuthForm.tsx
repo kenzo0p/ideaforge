@@ -45,7 +45,7 @@ export default function AuthForm({
         <div className="mb-3 inline-flex items-center gap-2 text-lg font-bold">
           <Sparkles className="size-5 text-brand" />
           <span className="bg-gradient-to-r from-brand to-brand-2 bg-clip-text text-transparent">
-            IdeaForge
+            Scrutan
           </span>
         </div>
         <h1 className="text-2xl font-bold">{isSignUp ? "Create your account" : "Welcome back"}</h1>
@@ -112,7 +112,7 @@ export default function AuthForm({
       </form>
 
       <p className="mt-4 text-center text-sm text-muted">
-        {isSignUp ? "Already have an account? " : "New to IdeaForge? "}
+        {isSignUp ? "Already have an account? " : "New to Scrutan? "}
         <Link
           href={isSignUp ? "/sign-in" : "/sign-up"}
           className="font-medium text-brand hover:underline"

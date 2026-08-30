@@ -2,7 +2,7 @@ import { classifyFailure } from "@/lib/health/failures";
 import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
-import { getLayer2 } from "@/lib/insights/layer2";
+import { getPipeline } from "@/lib/pipeline";
 import { detectKind, extractDocument } from "@/lib/extract/document";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const review = await getLayer2().reviewDocument(
+    const review = await getPipeline().reviewDocument(
       {
         fileName: file.name,
         kind,

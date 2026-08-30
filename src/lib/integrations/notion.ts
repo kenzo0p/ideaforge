@@ -112,7 +112,7 @@ export async function createNotionPage(input: {
   const parentId = await findParentPage(input.accessToken);
   if (!parentId) {
     throw new Error(
-      "No Notion page is shared with IdeaForge. Re-connect and tick at least one page when Notion asks which to share.",
+      "No Notion page is shared with Scrutan. Re-connect and tick at least one page when Notion asks which to share.",
     );
   }
 

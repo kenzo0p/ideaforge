@@ -8,12 +8,14 @@ import {
   membershipFor,
   orgProjectOverview,
 } from "@/lib/db/orgs";
+import { clusterWorkspaceIdeas } from "@/lib/db/similar";
 import { PLANS, formatLimit } from "@/lib/billing/plans";
 import { timeAgo } from "@/lib/format";
 import CreateOrgForm from "@/components/CreateOrgForm";
 import UpgradePrompt from "@/components/UpgradePrompt";
 import OrgDomains from "@/components/OrgDomains";
 import OrgMembers from "@/components/OrgMembers";
+import CohortNovelty from "@/components/CohortNovelty";
 
 export const dynamic = "force-dynamic";
 
@@ -53,11 +55,27 @@ export default async function OrgPage() {
   const canMentor = role !== "member";
   const plan = PLANS[org.planId];
 
-  const [members, used, overview] = await Promise.all([
-    isOwner ? listOrgMembers(org.id) : Promise.resolve([]),
+  // Every owner is also a mentor, so one roster fetch serves both the member
+  // table and the overlap report. What differs is who is allowed to *see* the
+  // roster, and that stays a rendering decision below rather than two queries
+  // that could drift apart.
+  const [roster, used, overview] = await Promise.all([
+    canMentor ? listOrgMembers(org.id) : Promise.resolve([]),
     countOrgMembers(org.id),
     canMentor ? orgProjectOverview(org.id) : Promise.resolve([]),
   ]);
+  const members = isOwner ? roster : [];
+
+  // Mentors only. The report names people alongside their unpublished ideas,
+  // which is a reasonable thing for a guide to see across their own cohort and
+  // not something a peer in the same workspace should be handed.
+  const novelty = canMentor
+    ? await clusterWorkspaceIdeas({ userIds: roster.map((m) => m.userId) }).catch((err) => {
+        // A failed comparison must not take the workspace page down with it.
+        console.error("Cohort overlap failed:", err instanceof Error ? err.message : err);
+        return null;
+      })
+    : null;
 
   return (
     <main className="mx-auto w-full max-w-4xl px-5 py-10">
@@ -173,6 +191,8 @@ export default async function OrgPage() {
             )}
           </section>
         )}
+
+        {novelty && <CohortNovelty report={novelty} />}
 
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
