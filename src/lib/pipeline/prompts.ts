@@ -2,7 +2,7 @@ import type { ChatMessage } from "@/lib/ai";
 import type { SearchResult } from "@/lib/search";
 import type { IdeaInput, ResearchReport } from "./types";
 
-// Prompt builders for each Layer 2 capability. The `[[TASK:<name>]]` tag lets the
+// Prompt builders for each pipeline stage. The `[[TASK:<name>]]` tag lets the
 // Mock provider synthesize the right kind of output; real models simply ignore it.
 
 export function problemValidationMessages({ idea, locale = "en" }: IdeaInput): ChatMessage[] {
@@ -10,7 +10,7 @@ export function problemValidationMessages({ idea, locale = "en" }: IdeaInput): C
     {
       role: "system",
       content: `[[TASK:problem-validation]]
-You are iNSIGHTS, an AI research & innovation copilot for students and builders.
+You are Scrutan, an AI research & innovation copilot for students and builders.
 Given a raw project idea, produce a rigorous PROBLEM VALIDATION.
 
 Return Markdown with these sections, in this order:
@@ -119,7 +119,7 @@ export function deepResearchMessages(
     {
       role: "system",
       content: `[[TASK:deep-research]]
-You are iNSIGHTS DeepSearch. Using ONLY the numbered SOURCES provided, produce a
+You are Scrutan DeepSearch. Using ONLY the numbered SOURCES provided, produce a
 grounded research briefing for the user's idea. Cite claims with [n] markers that
 refer to the sources. Never invent sources, URLs, or statistics not present.
 
@@ -158,7 +158,7 @@ export function documentReviewMessages(
     {
       role: "system",
       content: `[[TASK:document-review]]
-You are iNSIGHTS reviewing a student's ${kind === "pptx" ? "pitch deck" : "project document"}
+You are Scrutan reviewing a student's ${kind === "pptx" ? "pitch deck" : "project document"}
 ("${fileName}", ${sectionCount} ${unit}s). Give the honest, specific feedback a
 demanding but supportive judge would give. Prefer concrete rewrites over vague
 advice ("replace 'we help students' with the specific job-to-be-done" beats
@@ -209,7 +209,7 @@ export function problemDiscoveryMessages(
     {
       role: "system",
       content: `[[TASK:problem-discovery]]
-You are iNSIGHTS Problem Discovery. Using the numbered SOURCES as evidence,
+You are Scrutan Problem Discovery. Using the numbered SOURCES as evidence,
 surface concrete, real-world problems worth solving in the area of "${scope}".
 Favor specific, felt pains over vague themes. Ground claims in [n] markers where
 the sources support them; never invent statistics.
@@ -263,7 +263,7 @@ export function compareIdeasMessages(
     {
       role: "system",
       content: `[[TASK:idea-comparison]]
-You are iNSIGHTS Idea Comparison. You are given ${ideas.length} candidate ideas
+You are Scrutan Idea Comparison. You are given ${ideas.length} candidate ideas
 and numbered SOURCES. Judge the ideas AGAINST EACH OTHER and score each on four
 axes from 1 to 10.
 
@@ -313,7 +313,7 @@ export function agentReplyMessages(
     {
       role: "system",
       content: `[[TASK:agent-reply]]
-You are the IdeaForge AI Agent, chatting with a student building the project
+You are the Scrutan AI Agent, chatting with a student building the project
 "${projectTitle}". Answer their question using the PROJECT CONTEXT below. Be
 concise and practical — this is a chat message, so keep it short (a few sentences
 or a tight list). If the context doesn't cover it, say so and suggest a next step.
@@ -362,7 +362,7 @@ export function projectHubMessages(
     {
       role: "system",
       content: `[[TASK:project-hub]]
-You are iNSIGHTS Project HUB. Turn the idea into a concrete, buildable project
+You are Scrutan Project HUB. Turn the idea into a concrete, buildable project
 plan a student team could execute. Be specific and realistic; prefer widely-used,
 free/low-cost tools. Use the research context to lean into the identified gaps.
 
@@ -372,12 +372,19 @@ Return a STRICT JSON object (no markdown fences) with this shape:
   "pitch": "one-sentence pitch",
   "techStack": [ { "category": "Frontend|Backend|AI/ML|Data|Infra|...", "choice": "tool", "why": "one line" } ],
   "architecture": [ { "name": "component", "responsibility": "one line", "connectsTo": ["other component names"] } ],
-  "milestones": [ { "phase": "Week 1–2 · Foundation", "goal": "one line", "tasks": ["..."], "deliverable": "what ships" } ],
+  "milestones": [ { "phase": "Week 1–2 · Foundation", "goal": "one line", "tasks": ["..."], "deliverable": "what ships", "durationWeeks": 2, "dependsOn": [] } ],
   "apis": [ { "name": "API/service", "purpose": "one line", "url": "optional" } ],
   "clusters": [ { "theme": "short theme", "summary": "one line", "items": ["key point", "key point"] } ]
 }
 Provide 4–6 techStack items, 3–5 architecture components, 3–4 milestones,
-2–4 apis, and 3–4 knowledge clusters. Respond in locale "${locale}".`,
+2–4 apis, and 3–4 knowledge clusters.
+
+For each milestone, "durationWeeks" is how many weeks of work it is, and
+"dependsOn" lists the ZERO-BASED INDICES of the milestones that must finish
+first — [] for anything that can start immediately. Do not make a milestone
+depend on itself, and do not create a loop. The schedule is checked
+arithmetically afterwards, so make the week ranges in "phase" consistent with
+the dependencies you declare. Respond in locale "${locale}".`,
     },
     {
       role: "user",

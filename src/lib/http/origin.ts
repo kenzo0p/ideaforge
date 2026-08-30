@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 
 /**
- * The origin the *browser* used to reach us, e.g. https://ideaforge.onrender.com
+ * The origin the *browser* used to reach us, e.g. https://scrutan.onrender.com
  *
  * Never derive this from `request.url`. Behind a proxy — Render, Vercel, Fly,
  * anything with a load balancer — that is the internal listen address, so a

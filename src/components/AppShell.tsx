@@ -104,11 +104,11 @@ export default function AppShell({
   const sidebarContent = (mini: boolean) => (
     <div className="flex h-full flex-col gap-1 p-3">
       <div className={`mb-4 flex items-center ${mini ? "justify-center" : "justify-between"}`}>
-        <Link href="/" className="flex items-center gap-2 px-1 py-1.5" title="IdeaForge">
+        <Link href="/" className="flex items-center gap-2 px-1 py-1.5" title="Scrutan">
           <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-solid to-brand-2-solid text-on-brand">
             <Sparkles className="size-4" />
           </span>
-          {!mini && <span className="text-lg font-bold">IdeaForge</span>}
+          {!mini && <span className="text-lg font-bold">Scrutan</span>}
         </Link>
         {!mini && (
           <button
@@ -322,7 +322,7 @@ export default function AppShell({
           <span className="flex size-6 items-center justify-center rounded-md bg-gradient-to-br from-brand-solid to-brand-2-solid text-on-brand">
             <Sparkles className="size-3.5" />
           </span>
-          IdeaForge
+          Scrutan
         </Link>
         <button
           onClick={() => setOpen(true)}

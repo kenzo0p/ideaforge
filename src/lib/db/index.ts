@@ -1,3 +1,4 @@
+import dns from "node:dns";
 import { MongoClient, type Collection, type Db, type Document } from "mongodb";
 
 // ---------------------------------------------------------------------------
@@ -21,7 +22,40 @@ import { MongoClient, type Collection, type Db, type Document } from "mongodb";
 //     old API exactly. `expiresAt` is the one Date, because TTL requires it.
 // ---------------------------------------------------------------------------
 
-export const DB_NAME = process.env.MONGODB_DB ?? "ideaforge";
+export const DB_NAME = process.env.MONGODB_DB ?? "scrutan";
+
+/** What Node is currently resolving DNS with, for diagnostics. */
+function dnsServers(): string {
+  try {
+    return dns.getServers().join(", ") || "(none configured)";
+  } catch {
+    return "(unknown)";
+  }
+}
+
+/**
+ * Escape hatch for a broken host resolver.
+ *
+ * Node reads /etc/resolv.conf through c-ares, which on macOS is frequently
+ * either stale or unparseable — an IPv6 link-local nameserver makes it fall
+ * back to 127.0.0.1, where nothing answers. The whole app then looks like it
+ * has lost its database while every other tool on the machine resolves fine.
+ *
+ * Off unless set, because silently rerouting a deployment's DNS to a public
+ * resolver is not a decision this module should make on anyone's behalf.
+ */
+function applyDnsOverride(): void {
+  const raw = process.env.DNS_SERVERS?.trim();
+  if (!raw) return;
+  const servers = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (servers.length === 0) return;
+  try {
+    dns.setServers(servers);
+    console.log(`DNS override active: resolving via ${servers.join(", ")}`);
+  } catch (err) {
+    console.error("DNS_SERVERS is not a valid server list:", err instanceof Error ? err.message : err);
+  }
+}
 
 function uri(): string {
   const value = process.env.MONGODB_URI;
@@ -35,9 +69,9 @@ function uri(): string {
 }
 
 const g = globalThis as unknown as {
-  __ideaforgeMongo?: Promise<Db>;
-  __ideaforgeMongoFailedAt?: number;
-  __ideaforgeMongoError?: unknown;
+  __scrutanMongo?: Promise<Db>;
+  __scrutanMongoFailedAt?: number;
+  __scrutanMongoError?: unknown;
 };
 
 /**
@@ -53,31 +87,33 @@ const RETRY_COOLDOWN_MS = 5_000;
 
 /** The shared database handle, connected and indexed exactly once. */
 export function getDb(): Promise<Db> {
-  if (!g.__ideaforgeMongo) {
+  if (!g.__scrutanMongo) {
     // Never cache a rejected promise permanently: a bad URI would otherwise
     // keep failing for the life of the process even once the env is corrected.
     // But do hold the failure briefly so retries can't pile up.
-    const since = Date.now() - (g.__ideaforgeMongoFailedAt ?? 0);
-    if (g.__ideaforgeMongoError !== undefined && since < RETRY_COOLDOWN_MS) {
-      return Promise.reject(g.__ideaforgeMongoError);
+    const since = Date.now() - (g.__scrutanMongoFailedAt ?? 0);
+    if (g.__scrutanMongoError !== undefined && since < RETRY_COOLDOWN_MS) {
+      return Promise.reject(g.__scrutanMongoError);
     }
-    g.__ideaforgeMongo = connect().then(
+    g.__scrutanMongo = connect().then(
       (db) => {
-        g.__ideaforgeMongoError = undefined;
+        g.__scrutanMongoError = undefined;
         return db;
       },
       (err) => {
-        g.__ideaforgeMongo = undefined;
-        g.__ideaforgeMongoFailedAt = Date.now();
-        g.__ideaforgeMongoError = err;
+        g.__scrutanMongo = undefined;
+        g.__scrutanMongoFailedAt = Date.now();
+        g.__scrutanMongoError = err;
         throw err;
       },
     );
   }
-  return g.__ideaforgeMongo;
+  return g.__scrutanMongo;
 }
 
 async function connect(): Promise<Db> {
+  applyDnsOverride();
+
   const client = new MongoClient(uri(), {
     // The driver's default pool is 100 connections. That is far too many for a
     // small instance talking to a shared-tier cluster: every one needs its own
@@ -117,6 +153,22 @@ async function connect(): Promise<Db> {
           "against your tier's limit (M0 allows 500), and confirm Atlas → " +
           "Network Access allows this host. Lower MONGODB_MAX_POOL_SIZE if the " +
           "connection count is near the cap.",
+        { cause: err },
+      );
+    }
+    // A refused *DNS* query is not a MongoDB problem at all, and sending
+    // someone to check Atlas for it wastes their afternoon. It happens on macOS
+    // whenever /etc/resolv.conf holds an IPv6 link-local nameserver
+    // (fe80::…%en0): Node's c-ares cannot parse the %scope, silently falls back
+    // to 127.0.0.1, and nothing is listening there. `dig` keeps working the
+    // whole time, because it uses the system resolver rather than c-ares.
+    if (/ECONNREFUSED|ESERVFAIL|EREFUSED/i.test(message) && /querySrv|queryA|getaddrinfo/i.test(message)) {
+      throw new Error(
+        "This machine's DNS resolver refused the lookup, so the cluster was " +
+          "never contacted — nothing is wrong with MONGODB_URI or Atlas. " +
+          `Node is resolving via ${dnsServers()}. Set a working DNS server in ` +
+          "your network settings (e.g. 1.1.1.1), or set DNS_SERVERS=1.1.1.1,8.8.8.8 " +
+          "to override it for this app only.",
         { cause: err },
       );
     }
@@ -217,6 +269,11 @@ async function ensureIndexes(db: Db): Promise<void> {
 
     // The timeline read, the coalescing lookup and the prune all sort by this.
     db.collection("projectVersions").createIndex({ projectId: 1, createdAt: -1 }),
+
+    // Similarity search scans by owner, then filters by model.
+    db.collection("ideaVectors").createIndex({ userId: 1, model: 1 }),
+    db.collection("ideaVectors").createIndex({ projectId: 1 }),
+    db.collection("groundingReports").createIndex({ userId: 1 }),
 
     // The public directory and the sitemap read exactly this.
     db.collection("projects").createIndex(

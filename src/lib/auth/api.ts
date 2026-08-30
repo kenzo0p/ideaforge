@@ -15,7 +15,7 @@ import type { User } from "@/lib/db/users";
 export async function requireApiUser(): Promise<User | Response> {
   const user = await getCurrentUser();
   if (!user) {
-    return Response.json({ error: "Please sign in to use IdeaForge." }, { status: 401 });
+    return Response.json({ error: "Please sign in to use Scrutan." }, { status: 401 });
   }
   return user;
 }

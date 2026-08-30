@@ -1,4 +1,4 @@
-# IdeaForge — demo script
+# Scrutan — demo script
 
 Live: <https://ideaforge-2e1m.onrender.com>
 
@@ -13,7 +13,7 @@ setup, not code.
 ## The one-liner
 
 > Going from "I have an idea" to "I know if it's worth building, and here's the
-> plan" takes a researcher two weeks. IdeaForge does it in four minutes, and
+> plan" takes a researcher two weeks. Scrutan does it in four minutes, and
 > shows its sources.
 
 ## The problem, in three sentences
@@ -35,7 +35,7 @@ Timings are speaking time. Practice once with a stopwatch.
 *Land on the home page. Don't sign in yet.*
 
 > "Everyone here has had an idea and then lost a weekend to browser tabs.
-> IdeaForge is a research copilot that takes a one-line idea and gives you back
+> Scrutan is a research copilot that takes a one-line idea and gives you back
 > three things: is this problem real, has it been solved, and what do I build
 > first. Every claim it makes is linked to a source."
 
@@ -114,7 +114,7 @@ Suggested: `A campus tool that matches students to research labs by interest`
 
 # The 60-second version
 
-> "IdeaForge turns a one-line idea into a validated project plan.
+> "Scrutan turns a one-line idea into a validated project plan.
 >
 > You type an idea. It tells you whether the problem is real and scores how
 > severe it is — and it will tell you when an idea is weak.

@@ -12,6 +12,12 @@ import ConnectTelegram from "@/components/ConnectTelegram";
 import ProjectReminders from "@/components/ProjectReminders";
 import ShareProject from "@/components/ShareProject";
 import VersionHistory from "@/components/VersionHistory";
+import GroundingCheck from "@/components/GroundingCheck";
+import GroundingBadge from "@/components/GroundingBadge";
+import ClaimCheck from "@/components/ClaimCheck";
+import ConsistencyCheck from "@/components/ConsistencyCheck";
+import { claimsAction, groundingAction } from "@/lib/research-actions";
+import { checkConsistency } from "@/lib/verify/consistency";
 import Collaborators from "@/components/Collaborators";
 import CommentThread from "@/components/CommentThread";
 import { collaborationStateAction } from "@/lib/collab-actions";
@@ -57,6 +63,15 @@ export default async function ProjectPage({
   const collab = await collaborationStateAction(id);
   const integrationStatus = await integrationStatusAction();
   const watchState = await watchStatusAction(id);
+  const grounding = await groundingAction(id);
+  const claims = await claimsAction(id);
+  // Pure and instant — no network, no model — so it runs on every load rather
+  // than waiting to be asked for.
+  const consistency = checkConsistency({
+    validationMarkdown: project.validationMarkdown,
+    research: project.research,
+    plan: project.plan,
+  });
 
   return (
     <main className="mx-auto w-full max-w-6xl px-5 py-8">
@@ -71,7 +86,21 @@ export default async function ProjectPage({
         <div>
           <h1 className="text-2xl font-bold leading-tight">{project.title}</h1>
           <p className="mt-1 text-sm text-muted">{project.idea}</p>
-          <p className="mt-2 text-xs text-muted">Updated {timeAgo(project.updatedAt)}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+            <span>Updated {timeAgo(project.updatedAt)}</span>
+            {/* The score belongs beside the title, not buried in a tab. How much
+                of this brief survived being checked is the first thing that
+                should qualify everything under it. */}
+            {project.research && (project.research.citations?.length ?? 0) > 0 && (
+              <Link href={`/projects/${project.id}?tab=research`} className="hover:opacity-80">
+                <GroundingBadge
+                  score={grounding?.groundingScore ?? null}
+                  verified={grounding?.verified}
+                  total={grounding?.verdicts.length}
+                />
+              </Link>
+            )}
+          </div>
         </div>
         <ExportMenu
           projectId={project.id}
@@ -81,6 +110,15 @@ export default async function ProjectPage({
           }}
         />
       </header>
+
+      {/* Above the tabs: a contradiction between the research and the plan
+          belongs to neither tab, and putting it inside one would hide it from
+          whoever opened the other. */}
+      {consistency.ran > 0 && (
+        <div className="mb-4">
+          <ConsistencyCheck report={consistency} />
+        </div>
+      )}
 
       <ProjectTabBar
         projectId={project.id}
@@ -116,7 +154,26 @@ export default async function ProjectPage({
               findings={watchState?.findings ?? []}
             />
             {project.research ? (
-              <ResearchPanel report={project.research} searchProvider="Saved" plan={project.plan} />
+              <>
+                {/* Verification sits above the report: whether the sources hold
+                    up changes how you should read everything below it. */}
+                <GroundingCheck
+                  projectId={project.id}
+                  citationCount={project.research.citations?.length ?? 0}
+                  initial={grounding}
+                />
+                {/* Reachability, then substance. The order matters: a source
+                    that does not resolve cannot support anything, so there is
+                    no point reading a claim verdict about it first. */}
+                <ClaimCheck
+                  projectId={project.id}
+                  hasResearch={!!project.research.summaryMarkdown}
+                  initial={claims}
+                />
+                <div className="mt-5">
+                  <ResearchPanel report={project.research} searchProvider="Saved" plan={project.plan} />
+                </div>
+              </>
             ) : (
               <EmptySection label="No research saved for this project." />
             )}

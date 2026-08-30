@@ -193,7 +193,7 @@ function agentReply(question: string): string {
 
 /** Demo Project HUB plan as strict JSON. Resources are attached server-side. */
 function projectHub(subject: string): string {
-  const name = capitalize(subject.split(/\s+/).slice(0, 2).join(" ")) || "IdeaForge";
+  const name = capitalize(subject.split(/\s+/).slice(0, 2).join(" ")) || "Scrutan";
   const payload = {
     title: `${name} Copilot`,
     pitch: `A focused tool that helps people with ${subject} — faster, cheaper, and more trustworthy than today's options.`,
@@ -211,11 +211,15 @@ function projectHub(subject: string): string {
       { name: "Search Service", responsibility: "Grounds results in live web data.", connectsTo: [] },
       { name: "Database", responsibility: "Persists projects and findings.", connectsTo: [] },
     ],
+    // Dependencies are declared here so the offline demo exercises the schedule
+    // check rather than falling back to an assumed straight line. The shape is
+    // a diamond on purpose: "Planning" and "Polish" both wait on "Intelligence",
+    // which gives one branch real slack and makes the Gantt worth looking at.
     milestones: [
-      { phase: "Week 1 · Foundation", goal: "Stand up the core loop.", tasks: ["Scaffold app", "Wire provider layer", "Ship input → result"], deliverable: "Working vertical slice" },
-      { phase: "Week 2 · Intelligence", goal: "Add grounded research.", tasks: ["Integrate search", "Citations", "Comparison view"], deliverable: "Citation-backed briefings" },
-      { phase: "Week 3 · Planning", goal: "Generate build plans.", tasks: ["Plan generation", "Resource recommendations", "Export"], deliverable: "End-to-end plan output" },
-      { phase: "Week 4 · Polish", goal: "Harden and present.", tasks: ["Auth + persistence", "Dashboard", "Demo script"], deliverable: "Demo-ready product" },
+      { phase: "Week 1 · Foundation", goal: "Stand up the core loop.", tasks: ["Scaffold app", "Wire provider layer", "Ship input → result"], deliverable: "Working vertical slice", durationWeeks: 1, dependsOn: [] },
+      { phase: "Week 2 · Intelligence", goal: "Add grounded research.", tasks: ["Integrate search", "Citations", "Comparison view"], deliverable: "Citation-backed briefings", durationWeeks: 1, dependsOn: [0] },
+      { phase: "Week 3 · Planning", goal: "Generate build plans.", tasks: ["Plan generation", "Resource recommendations", "Export"], deliverable: "End-to-end plan output", durationWeeks: 2, dependsOn: [1] },
+      { phase: "Week 4 · Polish", goal: "Harden and present.", tasks: ["Auth + persistence", "Dashboard", "Demo script"], deliverable: "Demo-ready product", durationWeeks: 1, dependsOn: [1] },
     ],
     apis: [
       { name: "OpenAI / Anthropic API", purpose: "LLM reasoning and synthesis." },

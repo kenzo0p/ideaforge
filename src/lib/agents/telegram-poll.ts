@@ -21,12 +21,12 @@ import {
 // so dev/HMR restarts don't spawn duplicate loops.
 // ---------------------------------------------------------------------------
 
-const g = globalThis as unknown as { __ideaforgeTelegramPolling?: boolean };
+const g = globalThis as unknown as { __scrutanTelegramPolling?: boolean };
 
 export function startTelegramPolling(): void {
-  if (g.__ideaforgeTelegramPolling) return;
+  if (g.__scrutanTelegramPolling) return;
   if (!process.env.TELEGRAM_BOT_TOKEN) return;
-  g.__ideaforgeTelegramPolling = true;
+  g.__scrutanTelegramPolling = true;
   void loop();
 }
 
@@ -91,7 +91,7 @@ async function handleUpdate(update: TelegramUpdate): Promise<void> {
       chatId,
       user
         ? `✅ Connected to *${user.email}*.\n\nSend /projects, then reply with a number to pick the project you want to work on.`
-        : "⚠️ That link code is invalid or expired. Generate a new one from IdeaForge → Connect Telegram.",
+        : "⚠️ That link code is invalid or expired. Generate a new one from Scrutan → Connect Telegram.",
     );
     return;
   }
@@ -100,7 +100,7 @@ async function handleUpdate(update: TelegramUpdate): Promise<void> {
   if (/^\/start$/i.test(text)) {
     await sendTelegramMessage(
       chatId,
-      "👋 *IdeaForge Agent*\nConnect your account to get started: open IdeaForge → *Connect Telegram* and tap the link. Then try /projects.",
+      "👋 *Scrutan Agent*\nConnect your account to get started: open Scrutan → *Connect Telegram* and tap the link. Then try /projects.",
     );
     return;
   }

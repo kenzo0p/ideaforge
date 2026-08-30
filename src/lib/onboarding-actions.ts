@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 
-const COOKIE = "ideaforge_onboarded";
+const COOKIE = "scrutan_onboarded";
 
 /** Remember that the checklist was dismissed, so it stays dismissed. */
 export async function dismissOnboardingAction(): Promise<void> {

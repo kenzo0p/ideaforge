@@ -60,7 +60,7 @@ class SmtpMailer implements Mailer {
     user = process.env.SMTP_USER,
     pass = process.env.SMTP_PASSWORD,
     from = process.env.EMAIL_FROM ??
-      `IdeaForge <${process.env.SMTP_USER ?? "no-reply@localhost"}>`,
+      `Scrutan <${process.env.SMTP_USER ?? "no-reply@localhost"}>`,
   ) {
     this.host = host;
     this.port = port;

@@ -39,11 +39,11 @@ export interface DependencyHealth {
  */
 const FAILURE_THRESHOLD = 3;
 
-const g = globalThis as unknown as { __ideaforgeHealth?: Map<DependencyId, DependencyHealth> };
+const g = globalThis as unknown as { __scrutanHealth?: Map<DependencyId, DependencyHealth> };
 
 function registry(): Map<DependencyId, DependencyHealth> {
-  g.__ideaforgeHealth ??= new Map();
-  return g.__ideaforgeHealth;
+  g.__scrutanHealth ??= new Map();
+  return g.__scrutanHealth;
 }
 
 function blank(id: DependencyId): DependencyHealth {

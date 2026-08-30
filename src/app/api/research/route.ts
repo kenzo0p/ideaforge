@@ -3,7 +3,7 @@ import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider } from "@/lib/search";
-import { getLayer2 } from "@/lib/insights/layer2";
+import { getPipeline } from "@/lib/pipeline";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 
 export const runtime = "nodejs";
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const report = await getLayer2().deepSearch({ idea, locale: body.locale }, req.signal);
+    const report = await getPipeline().deepSearch({ idea, locale: body.locale }, req.signal);
     return Response.json(report, {
       headers: {
         "Cache-Control": "no-store",

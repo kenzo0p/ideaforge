@@ -1,7 +1,8 @@
+import Link from "next/link";
 import IdeaConsole from "@/components/IdeaConsole";
 import SignInGate from "@/components/SignInGate";
-import { CAPABILITIES } from "@/lib/insights/capabilities";
-import { getLayer2 } from "@/lib/insights/layer2";
+import { CAPABILITIES } from "@/lib/pipeline/capabilities";
+import { getPipeline } from "@/lib/pipeline";
 import { getProvider } from "@/lib/ai";
 import { getCurrentUser } from "@/lib/auth/session";
 
@@ -10,7 +11,7 @@ export default async function Home({
 }: {
   searchParams: Promise<{ mode?: string }>;
 }) {
-  const live = getLayer2().capabilities;
+  const live = getPipeline().capabilities;
   const user = await getCurrentUser();
   const isAuthed = !!user;
   const isDemo = getProvider().isMock;
@@ -23,18 +24,20 @@ export default async function Home({
       <header className="mb-10">
         <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted">
           <span className="size-1.5 rounded-full bg-success" />
-          Powered by iNSIGHTS Layer 2
+          Every cited source is fetched and checked
         </div>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
           <span className="bg-gradient-to-r from-brand to-brand-2 bg-clip-text text-transparent">
-            IdeaForge
+            Scrutan
           </span>
         </h1>
-        <p className="mt-2 text-lg font-medium text-foreground/80">Search Less. Solve More.</p>
+        <p className="mt-2 text-lg font-medium text-foreground/80">Proof before you build.</p>
         <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">
-          Your AI research &amp; innovation copilot. Drop in a one-line idea and go from
-          problem discovery to a validated, buildable project — with citation-backed research,
-          an auto-generated plan, and the resources to ship it.
+          Most AI tools will happily tell you your idea is brilliant. Scrutan scrutinises it:
+          it scores how real the problem is, researches it against live sources, then{" "}
+          <strong className="font-semibold text-foreground/90">opens every citation to
+          confirm the source exists and says what it was cited for</strong> — and tells you
+          when the answer is that your idea isn&apos;t worth building.
         </p>
       </header>
 
@@ -60,13 +63,13 @@ export default async function Home({
         <SignInGate />
       )}
 
-      {/* Capability roadmap */}
+      {/* What it does. Everything here is shipped — this is not a roadmap. */}
       <section className="mt-14">
         <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-muted">
-          ideaforge capabilities
+          What Scrutan does
         </h2>
         <p className="mb-5 text-sm text-muted">
-          Problem validation is live. Here&apos;s the full copilot taking shape.
+          From a one-line idea to a checked, buildable brief.
         </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {CAPABILITIES.map((cap) => {
@@ -84,13 +87,11 @@ export default async function Home({
                     </span>
                     {cap.title}
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                      isLive ? "bg-success/15 text-success" : "border border-border text-muted"
-                    }`}
-                  >
-                    {isLive ? "Live" : `Part ${cap.part}`}
-                  </span>
+                  {!isLive && (
+                    <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                      Off
+                    </span>
+                  )}
                 </div>
                 <p className="mt-2 text-sm text-muted">{cap.blurb}</p>
               </div>
@@ -100,7 +101,14 @@ export default async function Home({
       </section>
 
       <footer className="mt-14 border-t border-border pt-6 text-center text-xs text-muted">
-        IdeaForge · Built in parts — Part 1: Foundation &amp; Problem Validation
+        Scrutan · An idea is only as good as the evidence behind it.{" "}
+        {/* The hero makes a claim about quality. This is where it is checked —
+            a claim of this kind with nowhere to verify it would be the exact
+            thing the rest of the page argues against. */}
+        <Link href="/quality" className="underline hover:text-foreground">
+          See how well it actually works
+        </Link>
+        .
       </footer>
     </main>
   );

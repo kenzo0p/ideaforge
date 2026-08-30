@@ -11,7 +11,7 @@ export const USERNAME_MAX = 20;
 
 /** Handles that would be confusing or that collide with routes. */
 const RESERVED = new Set([
-  "admin", "root", "system", "ideaforge", "support", "help", "api", "app",
+  "admin", "root", "system", "scrutan", "support", "help", "api", "app",
   "settings", "dashboard", "projects", "notifications", "sign-in", "sign-up",
   "invite", "share", "me", "you", "null", "undefined", "anonymous",
 ]);

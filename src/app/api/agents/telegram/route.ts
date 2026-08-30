@@ -64,7 +64,7 @@ export async function POST(req: Request) {
         chatId,
         user
           ? `✅ Connected to *${user.email}*.\n\nSend /projects, then reply with a number to pick the project you want to work on.`
-          : "⚠️ That link code is invalid or expired. Generate a new one from IdeaForge → Connect Telegram.",
+          : "⚠️ That link code is invalid or expired. Generate a new one from Scrutan → Connect Telegram.",
       );
       return Response.json({ ok: true });
     }
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     if (/^\/start$/i.test(text)) {
       await sendTelegramMessage(
         chatId,
-        "👋 *IdeaForge Agent*\nConnect your account to get started: open IdeaForge → *Connect Telegram* and tap the link. Then send /projects.",
+        "👋 *Scrutan Agent*\nConnect your account to get started: open Scrutan → *Connect Telegram* and tap the link. Then send /projects.",
       );
       return Response.json({ ok: true });
     }

@@ -1,4 +1,4 @@
-import type { Resource } from "@/lib/insights/types";
+import type { Resource } from "@/lib/pipeline/types";
 
 // CORE (core.ac.uk) research-paper search — v3 works endpoint (POST + Bearer).
 export function isCoreConfigured(): boolean {

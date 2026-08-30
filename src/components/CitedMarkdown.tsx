@@ -4,7 +4,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExternalLink, X } from "lucide-react";
-import type { Citation } from "@/lib/insights/types";
+import type { Citation } from "@/lib/pipeline/types";
 
 // ---------------------------------------------------------------------------
 // Markdown with clickable citations.

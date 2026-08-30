@@ -2,7 +2,7 @@ import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getSearchProvider } from "@/lib/search";
 import { hostnameOf, type SearchResult } from "@/lib/search/types";
-import { relevantToIdea } from "@/lib/insights/relevance";
+import { relevantToIdea } from "@/lib/pipeline/relevance";
 import { getProject } from "@/lib/db/projects";
 import { getChatIdForUser } from "@/lib/db/telegram";
 import { sendTelegramMessage } from "@/lib/agents/telegram";
@@ -18,7 +18,7 @@ import {
 } from "@/lib/db/watches";
 
 // ---------------------------------------------------------------------------
-// Watch runner — the thing that makes IdeaForge recurring rather than one-off.
+// Watch runner — the thing that makes Scrutan recurring rather than one-off.
 //
 // Each cycle re-runs a project's research queries with a recency window and
 // keeps only results never seen for that watch. The deduplication is done by a

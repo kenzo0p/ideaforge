@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getProject } from "@/lib/db/projects";
 import { canCreateWatch, canUseCadence } from "@/lib/billing/entitlements";
-import { deepResearchQueries } from "@/lib/insights/prompts";
+import { deepResearchQueries } from "@/lib/pipeline/prompts";
 import {
   countActiveWatches,
   createWatch,

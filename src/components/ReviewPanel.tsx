@@ -11,7 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import { USAGE_EVENT } from "@/components/UsageMeter";
-import type { DocumentReview } from "@/lib/insights/types";
+import type { DocumentReview } from "@/lib/pipeline/types";
 
 type Status = "idle" | "loading" | "done" | "error";
 

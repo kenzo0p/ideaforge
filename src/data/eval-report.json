@@ -1,0 +1,10 @@
+{
+  "ranAt": null,
+  "repeats": 0,
+  "cases": 0,
+  "checks": { "passed": 0, "scored": 0, "flaky": 0 },
+  "pct": 0,
+  "dimensions": [],
+  "failing": [],
+  "flakyChecks": []
+}

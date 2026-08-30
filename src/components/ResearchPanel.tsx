@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink, Lightbulb, Search, Swords } from "lucide-react";
-import type { ProjectPlan, ResearchReport, ResearchResources } from "@/lib/insights/types";
+import type { ProjectPlan, ResearchReport, ResearchResources } from "@/lib/pipeline/types";
 import ResourceAside from "@/components/ResourceAside";
 import CitedMarkdown from "@/components/CitedMarkdown";
 
@@ -77,7 +77,7 @@ export default function ResearchPanel({
       {/* Every [n] in the briefing is a control that reveals its source. */}
       <CitedMarkdown
         citations={report.citations ?? []}
-        className="prose-insights max-w-[68ch] text-[15px]"
+        className="prose-brief max-w-[68ch] text-[15px]"
       >
         {report.summaryMarkdown}
       </CitedMarkdown>

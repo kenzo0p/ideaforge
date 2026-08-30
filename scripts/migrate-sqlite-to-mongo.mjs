@@ -3,7 +3,7 @@
 //
 //   node --env-file=.env.local scripts/migrate-sqlite-to-mongo.mjs [--dry-run]
 //
-// Reads from IDEAFORGE_DB (default data/ideaforge.db) or TURSO_DATABASE_URL,
+// Reads from SCRUTAN_DB (default data/scrutan.db) or TURSO_DATABASE_URL,
 // and writes to MONGODB_URI. Safe to re-run: every write is an upsert keyed on
 // the original id, so a second pass updates rather than duplicates.
 //
@@ -20,7 +20,7 @@ const DRY = process.argv.includes("--dry-run");
 
 const sqliteUrl =
   process.env.TURSO_DATABASE_URL ??
-  `file:${(process.env.IDEAFORGE_DB ?? "data/ideaforge.db").replace(/^file:/, "")}`;
+  `file:${(process.env.SCRUTAN_DB ?? "data/scrutan.db").replace(/^file:/, "")}`;
 
 const mongoUri = process.env.MONGODB_URI;
 if (!mongoUri) {
@@ -50,7 +50,7 @@ const parse = (json) => {
 };
 
 await mongo.connect();
-const db = mongo.db(process.env.MONGODB_DB ?? "ideaforge");
+const db = mongo.db(process.env.MONGODB_DB ?? "scrutan");
 console.log(`from : ${sqliteUrl}`);
 console.log(`to   : ${db.databaseName}${DRY ? "  (DRY RUN — nothing will be written)" : ""}\n`);
 

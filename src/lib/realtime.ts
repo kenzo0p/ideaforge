@@ -25,8 +25,8 @@ export interface RealtimeEvent {
 type Listener = (event: RealtimeEvent) => void;
 
 // Survives dev/HMR reloads; without this each reload would strand listeners.
-const g = globalThis as unknown as { __ideaforgeChannels?: Map<string, Set<Listener>> };
-const channels = (g.__ideaforgeChannels ??= new Map<string, Set<Listener>>());
+const g = globalThis as unknown as { __scrutanChannels?: Map<string, Set<Listener>> };
+const channels = (g.__scrutanChannels ??= new Map<string, Set<Listener>>());
 
 export function subscribe(channel: string, listener: Listener): () => void {
   let set = channels.get(channel);

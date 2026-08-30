@@ -2,7 +2,7 @@ import { classifyFailure } from "@/lib/health/failures";
 import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
-import { getLayer2 } from "@/lib/insights/layer2";
+import { getPipeline } from "@/lib/pipeline";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 import { canUseFeature } from "@/lib/billing/entitlements";
 
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const comparison = await getLayer2().compareIdeas({ ideas, locale: body.locale }, req.signal);
+    const comparison = await getPipeline().compareIdeas({ ideas, locale: body.locale }, req.signal);
     return Response.json(comparison, {
       headers: { "Cache-Control": "no-store", "X-Provider": getProvider().label },
     });

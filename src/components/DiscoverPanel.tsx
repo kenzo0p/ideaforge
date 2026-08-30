@@ -4,19 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Compass, ExternalLink, Loader2, Sparkles } from "lucide-react";
 import { USAGE_EVENT } from "@/components/UsageMeter";
-import type { ProblemDiscovery } from "@/lib/insights/types";
+import type { ProblemDiscovery } from "@/lib/pipeline/types";
 
 const SUGGESTIONS = ["Student life", "Climate", "Rural healthcare", "Personal finance", "Mental health"];
 
 type Status = "idle" | "loading" | "done" | "error";
 
 // Problem Discovery: help users FIND a real-world problem worth solving, then
-// hand the chosen starter idea back to the console via onForge().
+// hand the chosen starter idea back to the console via onScrutinise().
 export default function DiscoverPanel({
-  onForge,
+  onScrutinise,
   locale,
 }: {
-  onForge: (idea: string) => void;
+  onScrutinise: (idea: string) => void;
   locale: string;
 }) {
   const [domain, setDomain] = useState("");
@@ -161,10 +161,10 @@ export default function DiscoverPanel({
                       <span className="text-foreground/90">{p.starterIdea}</span>
                     </p>
                     <button
-                      onClick={() => onForge(p.starterIdea)}
+                      onClick={() => onScrutinise(p.starterIdea)}
                       className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-solid px-3 py-1.5 text-xs font-semibold text-on-brand transition hover:opacity-90"
                     >
-                      <Sparkles className="size-3.5" /> Forge this idea <ArrowRight className="size-3.5" />
+                      <Sparkles className="size-3.5" /> Scrutinise this idea <ArrowRight className="size-3.5" />
                     </button>
                   </div>
                 </div>

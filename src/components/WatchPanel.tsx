@@ -76,7 +76,7 @@ export default function WatchPanel({
           <h2 className="text-sm font-semibold">Watch this space</h2>
         </div>
         <p className="mb-4 max-w-prose text-sm text-muted">
-          Research goes stale. Turn this on and IdeaForge keeps searching in the background —
+          Research goes stale. Turn this on and Scrutan keeps searching in the background —
           new papers, competing repos, funding news — and tells you only what it hasn&apos;t
           shown you before.
         </p>

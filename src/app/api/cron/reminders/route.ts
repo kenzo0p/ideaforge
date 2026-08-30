@@ -1,5 +1,6 @@
 import { runDueReminders } from "@/lib/reminders/scheduler";
 import { runDueWatches } from "@/lib/watch/runner";
+import { runDueRevalidations } from "@/lib/verify/decay";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,8 +23,12 @@ export async function GET(req: Request) {
   }
 
   try {
-    const [reminders, watches] = await Promise.all([runDueReminders(), runDueWatches()]);
-    return Response.json({ ok: true, reminders, watches });
+    const [reminders, watches, revalidated] = await Promise.all([
+      runDueReminders(),
+      runDueWatches(),
+      runDueRevalidations(),
+    ]);
+    return Response.json({ ok: true, reminders, watches, revalidated });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Reminder run failed.";
     return Response.json({ ok: false, error: message }, { status: 500 });

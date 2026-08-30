@@ -1,5 +1,5 @@
 {
-  "description": "Golden set for IdeaForge output quality. Each case states what a good answer must contain, not what it must say word for word — the model is free to phrase things its own way, and the checks assert substance. Cases are tagged so a fast subset can gate a deploy while the full set runs less often.",
+  "description": "Golden set for Scrutan output quality. Each case states what a good answer must contain, not what it must say word for word — the model is free to phrase things its own way, and the checks assert substance. Cases are tagged so a fast subset can gate a deploy while the full set runs less often.",
   "tags": {
     "honesty": "Will the copilot say an idea is weak? This is the failure mode users notice.",
     "grounding": "Are citations real, distinct, and actually attached to claims?",

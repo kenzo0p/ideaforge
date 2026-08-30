@@ -1,12 +1,14 @@
 import { ImageResponse } from "next/og";
 import { getProjectByShareToken } from "@/lib/db/projects";
+import { getGrounding } from "@/lib/db/grounding";
+import { BAND_HEX, groundingBand, groundingPercent } from "@/lib/verify/score";
 
 // A link preview is the whole first impression when a brief is posted to a
 // group chat or a timeline. Rendered here rather than as a static file so the
 // card carries the actual idea — a generic logo card converts far worse.
 
 export const runtime = "nodejs";
-export const alt = "IdeaForge brief";
+export const alt = "Scrutan brief";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -26,8 +28,20 @@ export default async function Image({
 }) {
   const { token } = await params;
   const project = await getProjectByShareToken(token);
-  const title = project?.title ?? "IdeaForge";
-  const idea = project?.idea ?? "An AI research & innovation copilot.";
+  const title = project?.title ?? "Scrutan";
+  const idea = project?.idea ?? "Proof before you build.";
+
+  // The verification result is the one number on this card a stranger could
+  // go and check for themselves, which makes it the one worth putting in a
+  // link preview. A brief nobody has verified says so instead of staying blank.
+  const grounding = project ? await getGrounding(project.id) : null;
+  const total = grounding?.verdicts.length ?? 0;
+  const band = groundingBand(total > 0 ? grounding!.groundingScore : null);
+  const scoreColour = BAND_HEX[band];
+  const footnote =
+    total > 0
+      ? `${groundingPercent(grounding!.groundingScore)}% grounded · ${grounding!.verified} of ${total} sources verified`
+      : "Validated problem · researched · planned";
 
   return new ImageResponse(
     (
@@ -53,7 +67,7 @@ export default async function Image({
               display: "flex",
             }}
           />
-          <span style={{ fontSize: 26, fontWeight: 700, color: INK }}>IdeaForge</span>
+          <span style={{ fontSize: 26, fontWeight: 700, color: INK }}>Scrutan</span>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
@@ -73,10 +87,16 @@ export default async function Image({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ height: 6, width: 72, borderRadius: 3, background: BRAND, display: "flex" }} />
-          <span style={{ fontSize: 24, color: MUTED }}>
-            Validated problem · researched · planned
-          </span>
+          <div
+            style={{
+              height: 6,
+              width: 72,
+              borderRadius: 3,
+              background: total > 0 ? scoreColour : BRAND,
+              display: "flex",
+            }}
+          />
+          <span style={{ fontSize: 24, color: total > 0 ? scoreColour : MUTED }}>{footnote}</span>
         </div>
       </div>
     ),

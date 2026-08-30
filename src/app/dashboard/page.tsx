@@ -6,6 +6,7 @@ import ProjectFilters from "@/components/ProjectFilters";
 import GettingStarted from "@/components/GettingStarted";
 import { dismissOnboardingAction, isOnboardingDismissed } from "@/lib/onboarding-actions";
 import { listProjects, milestoneCounts } from "@/lib/db/projects";
+import { getGroundingScores } from "@/lib/db/grounding";
 import { isTelegramLinked } from "@/lib/db/telegram";
 import { isTelegramConfigured } from "@/lib/agents/telegram";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -17,6 +18,7 @@ export default async function DashboardPage() {
   if (!user) redirect("/sign-in");
   const projects = await listProjects(user.id);
   const doneCounts = await milestoneCounts(user.id);
+  const grounding = await getGroundingScores(projects.map((p) => p.id));
   const telegramConfigured = isTelegramConfigured();
   const telegramLinked = telegramConfigured && await isTelegramLinked(user.id);
 
@@ -65,7 +67,7 @@ export default async function DashboardPage() {
       {projects.length === 0 ? (
         <EmptyState />
       ) : (
-        <ProjectFilters projects={projects} doneCounts={doneCounts} />
+        <ProjectFilters projects={projects} doneCounts={doneCounts} grounding={grounding} />
       )}
     </main>
   );

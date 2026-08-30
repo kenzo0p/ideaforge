@@ -29,7 +29,7 @@ interface Command {
 }
 
 /** Dispatch to open the palette from a button. */
-export const PALETTE_EVENT = "ideaforge:palette";
+export const PALETTE_EVENT = "scrutan:palette";
 
 // ⌘K / Ctrl-K command palette: jump to a project or run a quick action.
 export default function CommandPalette({ projects }: { projects: PaletteProject[] }) {

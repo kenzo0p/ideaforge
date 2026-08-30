@@ -28,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "Content-Disposition": `attachment; filename="ideaforge-${slugify(project.title)}.pptx"`,
+      "Content-Disposition": `attachment; filename="scrutan-${slugify(project.title)}.pptx"`,
       "Cache-Control": "no-store",
     },
   });

@@ -10,7 +10,7 @@ import { attachToOrgOnLogin } from "@/lib/orgs/join";
 // Session cookie management. Opaque token in an HttpOnly cookie; the token maps
 // to a row in the `sessions` table (see db/users.ts).
 
-export const SESSION_COOKIE = "ideaforge_session";
+export const SESSION_COOKIE = "scrutan_session";
 const COOKIE = SESSION_COOKIE;
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days (seconds)
 

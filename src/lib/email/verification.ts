@@ -12,12 +12,12 @@ export async function sendPasswordResetEmail(
   const mailer = getMailer();
   const message = {
     to,
-    subject: "Reset your IdeaForge password",
-    text: `Someone requested a password reset for your IdeaForge account.\n\nReset it here:\n${link}\n\nThis link expires in 1 hour. If this wasn't you, ignore this email — nothing has changed.`,
+    subject: "Reset your Scrutan password",
+    text: `Someone requested a password reset for your Scrutan account.\n\nReset it here:\n${link}\n\nThis link expires in 1 hour. If this wasn't you, ignore this email — nothing has changed.`,
     html: `
       <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto">
         <h2>Reset your password</h2>
-        <p>Someone requested a password reset for your IdeaForge account.</p>
+        <p>Someone requested a password reset for your Scrutan account.</p>
         <p><a href="${link}" style="display:inline-block;background:#0d6a6a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Choose a new password</a></p>
         <p style="color:#666;font-size:13px">Or paste this link: ${link}<br/>It expires in 1 hour. If this wasn't you, ignore this email — nothing has changed.</p>
       </div>`,
@@ -44,11 +44,11 @@ export async function sendVerificationEmail(
   const mailer = getMailer();
   const message = {
     to,
-    subject: "Verify your IdeaForge email",
-    text: `Welcome to IdeaForge! Confirm your email to activate your account:\n\n${link}\n\nThis link expires in 24 hours.`,
+    subject: "Verify your Scrutan email",
+    text: `Welcome to Scrutan! Confirm your email to activate your account:\n\n${link}\n\nThis link expires in 24 hours.`,
     html: `
       <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto">
-        <h2>Welcome to IdeaForge 🔨</h2>
+        <h2>Welcome to Scrutan 🔨</h2>
         <p>Confirm your email to activate your account and start forging ideas.</p>
         <p><a href="${link}" style="display:inline-block;background:#0d6a6a;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Verify email</a></p>
         <p style="color:#666;font-size:13px">Or paste this link: ${link}<br/>It expires in 24 hours.</p>

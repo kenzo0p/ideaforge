@@ -1,4 +1,4 @@
-import type { Resource } from "@/lib/insights/types";
+import type { Resource } from "@/lib/pipeline/types";
 
 // GitHub repository search. Uses GITHUB_TOKEN for a 5,000/hr authenticated rate
 // limit (works unauthenticated too, at a much lower limit).

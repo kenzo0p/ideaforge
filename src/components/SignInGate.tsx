@@ -9,7 +9,7 @@ export default function SignInGate() {
       <div className="mx-auto mb-4 flex size-11 items-center justify-center rounded-full bg-brand/10">
         <Lock className="size-5 text-brand" />
       </div>
-      <h2 className="text-lg font-semibold">Sign in to start forging</h2>
+      <h2 className="text-lg font-semibold">Sign in to start scrutinising</h2>
       <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
         Create a free account to validate ideas, run DeepSearch, generate build plans, and save
         your projects.

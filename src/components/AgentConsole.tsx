@@ -76,7 +76,7 @@ export default function AgentConsole({ projectId }: { projectId: string }) {
               {m.role === "user" ? <User className="size-3.5" /> : <Bot className="size-3.5" />}
             </div>
             <div
-              className={`prose-insights max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
+              className={`prose-brief max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
                 m.role === "user"
                   ? "bg-brand-solid text-on-brand"
                   : "border border-border bg-card"

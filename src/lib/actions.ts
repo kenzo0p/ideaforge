@@ -10,6 +10,7 @@ import {
   disableShare,
   enableShare,
   setListed,
+  isDemoDerived,
   getProject,
   setMilestoneDone,
   updateProjectArtifacts,
@@ -150,9 +151,15 @@ export async function setListedAction(
   const userId = await requireUserId();
   const done = await setListed(projectId, userId, listed);
   if (!done) {
+    // Two different refusals, and telling them apart matters: one is "finish
+    // the work", the other is "this work can't be published at all".
+    const project = await getProject(projectId, userId);
+    const isDemo = project ? isDemoDerived(project) : false;
     return {
       ok: false,
-      error: "Share the project and validate the idea first — there's nothing to publish yet.",
+      error: isDemo
+        ? "This project was generated in demo mode, so its sources are examples rather than real ones. Re-run it with a live provider before publishing."
+        : "Share the project and validate the idea first — there's nothing to publish yet.",
     };
   }
   if (listed) void track(EVENTS.BRIEF_LISTED, { userId });

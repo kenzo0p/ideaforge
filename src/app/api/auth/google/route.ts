@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 // POST /api/auth/google  { idToken }
 //
 // Exchanges a verified Firebase ID token for one of our session cookies. This
-// is the only place a Google identity becomes an IdeaForge account, so the
+// is the only place a Google identity becomes an Scrutan account, so the
 // checks live here:
 //   • the token's signature/issuer/audience are verified (see lib/auth/firebase)
 //   • Google must report the address as verified, otherwise we refuse — linking

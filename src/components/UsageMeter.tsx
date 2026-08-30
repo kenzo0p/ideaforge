@@ -13,7 +13,7 @@ interface Quota {
 }
 
 /** Fire after a copilot call so the meter refreshes immediately. */
-export const USAGE_EVENT = "ideaforge:usage";
+export const USAGE_EVENT = "scrutan:usage";
 
 /**
  * Quota indicator in the sidebar.

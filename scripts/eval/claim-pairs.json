@@ -1,0 +1,213 @@
+{
+  "description": "Hand-labelled claim/passage pairs for calibrating the claim-support thresholds in src/lib/verify/claims.ts. A pair is `supports: true` when the passage, read on its own, would let a reasonable person say the claim is stated by this source. IMPORTANT: this is a development set, written by hand to span the decision boundary. It is not a held-out benchmark, and numbers measured on it are calibration figures, not an accuracy claim. The honest next step is to add pairs sampled from real briefings, labelled by someone who did not write the thresholds.",
+  "kinds": {
+    "paraphrase": "positive — the same fact in different words",
+    "embedded": "positive — the fact is stated inside a longer passage about other things",
+    "partial": "positive — stated, but with less precision than the claim",
+    "adjacent": "negative — same topic, a neighbouring fact, not this one",
+    "contradictory": "negative — the passage states the opposite or a different magnitude",
+    "generic": "negative — boilerplate about the domain that asserts nothing specific",
+    "unrelated": "negative — a different subject entirely"
+  },
+  "pairs": [
+    { "id": "waste-para", "kind": "paraphrase", "supports": true,
+      "claim": "Roughly a third of food prepared in college hostel messes is thrown away.",
+      "passage": "Surveys of residential campus kitchens found that about 33 percent of cooked food never reaches a plate and is discarded at the end of service." },
+
+    { "id": "waste-embedded", "kind": "embedded", "supports": true,
+      "claim": "Demand forecasting reduces over-preparation in canteens.",
+      "passage": "The pilot ran for eleven weeks across four sites. Staff logged headcount each evening. Where kitchens used the forecast to set batch sizes, over-preparation fell noticeably compared with the control sites, though procurement costs were unchanged and the labour saving was marginal." },
+
+    { "id": "waste-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Roughly a third of food prepared in college hostel messes is thrown away.",
+      "passage": "Hostel kitchens across the state now separate wet waste at source, and composting units installed in 2023 process the residue on site rather than sending it to landfill." },
+
+    { "id": "waste-contradictory", "kind": "contradictory", "supports": false,
+      "claim": "Hostel food waste costs Indian campuses around 40 crore rupees a year.",
+      "passage": "The report puts the annual cost of avoidable food waste in institutional catering at roughly 4 crore rupees nationally, a figure the authors describe as conservative." },
+
+    { "id": "waste-generic", "kind": "generic", "supports": false,
+      "claim": "Roughly a third of food prepared in college hostel messes is thrown away.",
+      "passage": "Food waste is an important challenge facing institutions today. Many organisations are exploring ways to become more sustainable and reduce their environmental footprint." },
+
+    { "id": "irrigation-para", "kind": "paraphrase", "supports": true,
+      "claim": "Soil moisture sensors let farmers water only when the crop needs it.",
+      "passage": "By reading moisture at root depth, the controller withholds irrigation until the soil drops below a set point, so water is applied on demand rather than on a fixed schedule." },
+
+    { "id": "irrigation-partial", "kind": "partial", "supports": true,
+      "claim": "Drip irrigation cuts water use in sugarcane by about 40 percent.",
+      "passage": "Growers switching from flood to drip reported water savings in the region of forty per cent for cane, alongside a modest yield gain." },
+
+    { "id": "irrigation-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Soil moisture sensors let farmers water only when the crop needs it.",
+      "passage": "Capacitive soil sensors degrade in saline conditions and require recalibration every season, which has limited their adoption among smallholders." },
+
+    { "id": "irrigation-contradictory", "kind": "contradictory", "supports": false,
+      "claim": "Drip irrigation cuts water use in sugarcane by about 40 percent.",
+      "passage": "Trials found drip made little difference to total water applied for cane, with savings under five per cent once system losses were accounted for." },
+
+    { "id": "irrigation-unrelated", "kind": "unrelated", "supports": false,
+      "claim": "Soil moisture sensors let farmers water only when the crop needs it.",
+      "passage": "The company's quarterly results beat analyst expectations, driven largely by growth in its cloud storage division and a one-off tax settlement." },
+
+    { "id": "triage-para", "kind": "paraphrase", "supports": true,
+      "claim": "Emergency departments in tier-2 cities routinely operate beyond their rated capacity.",
+      "passage": "Casualty wards in smaller cities are consistently over their sanctioned bed strength, with occupancy above one hundred per cent for most of the year." },
+
+    { "id": "triage-embedded", "kind": "embedded", "supports": true,
+      "claim": "Nurses spend a significant share of a shift on paperwork rather than patients.",
+      "passage": "Time-and-motion observation across three wards produced a familiar picture. Handover took twenty minutes. Medication rounds were efficient. But documentation consumed close to a third of each shift, time that observers noted was drawn directly from bedside care." },
+
+    { "id": "triage-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Nurses spend a significant share of a shift on paperwork rather than patients.",
+      "passage": "Nursing vacancies in the district stood at eighteen per cent last year, and the hospital has struggled to retain staff beyond their second year of service." },
+
+    { "id": "triage-generic", "kind": "generic", "supports": false,
+      "claim": "Emergency departments in tier-2 cities routinely operate beyond their rated capacity.",
+      "passage": "Healthcare delivery is a complex undertaking requiring coordination between many stakeholders. Improving patient outcomes remains a central goal for administrators everywhere." },
+
+    { "id": "attendance-para", "kind": "paraphrase", "supports": true,
+      "claim": "Face recognition attendance systems fail more often for darker skin tones.",
+      "passage": "Error rates in the tested systems were markedly higher for subjects with darker skin, with false rejection several times the rate recorded for the lightest group." },
+
+    { "id": "attendance-contradictory", "kind": "contradictory", "supports": false,
+      "claim": "Face recognition attendance systems fail more often for darker skin tones.",
+      "passage": "Across the evaluated vendors, accuracy was consistent between demographic groups, and the authors found no statistically significant difference by skin tone." },
+
+    { "id": "attendance-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Face recognition attendance systems fail more often for darker skin tones.",
+      "passage": "Several institutions have replaced biometric attendance with RFID cards after students objected to storing facial templates on college servers." },
+
+    { "id": "transit-para", "kind": "paraphrase", "supports": true,
+      "claim": "Real-time bus tracking increases ridership on suburban routes.",
+      "passage": "Where live arrival information was introduced, passenger numbers on outer routes rose over the following year, an effect the authors attribute to reduced waiting uncertainty." },
+
+    { "id": "transit-partial", "kind": "partial", "supports": true,
+      "claim": "GPS units on public buses report position every ten to fifteen seconds.",
+      "passage": "Each vehicle transmits its location to the control centre at intervals of roughly ten seconds." },
+
+    { "id": "transit-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Real-time bus tracking increases ridership on suburban routes.",
+      "passage": "The transport corporation spent 12 crore on the tracking rollout, funded through a central urban mobility grant awarded in the previous financial year." },
+
+    { "id": "transit-generic", "kind": "generic", "supports": false,
+      "claim": "GPS units on public buses report position every ten to fifteen seconds.",
+      "passage": "Modern transit systems rely on a range of technologies to improve the passenger experience and make services more reliable and easier to use." },
+
+    { "id": "upi-para", "kind": "paraphrase", "supports": true,
+      "claim": "UPI transaction volume has grown faster than card payments in India.",
+      "passage": "Unified Payments Interface volumes have expanded at a considerably steeper rate than debit and credit card transactions over the same period." },
+
+    { "id": "upi-embedded", "kind": "embedded", "supports": true,
+      "claim": "Small merchants adopt digital payments mainly to avoid handling cash.",
+      "passage": "Interviews with two hundred shopkeepers covered pricing, credit and staffing. On payments, the dominant reason given for accepting QR codes was not customer demand or cost but simply not wanting cash on the premises at closing time." },
+
+    { "id": "upi-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Small merchants adopt digital payments mainly to avoid handling cash.",
+      "passage": "Merchant discount rates on UPI remain at zero for most transaction categories, a policy that has been debated repeatedly since it was introduced." },
+
+    { "id": "upi-unrelated", "kind": "unrelated", "supports": false,
+      "claim": "UPI transaction volume has grown faster than card payments in India.",
+      "passage": "Rainfall in the catchment area was below the long-period average for the third consecutive monsoon, leaving reservoir levels at about half of capacity." },
+
+    { "id": "solar-para", "kind": "paraphrase", "supports": true,
+      "claim": "Rooftop solar payback periods in India are typically under six years.",
+      "passage": "For most residential installations the system pays for itself within five to six years at current tariffs." },
+
+    { "id": "solar-contradictory", "kind": "contradictory", "supports": false,
+      "claim": "Rooftop solar payback periods in India are typically under six years.",
+      "passage": "Payback on residential rooftop systems commonly runs to eleven or twelve years once financing costs and cleaning are included." },
+
+    { "id": "solar-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Rooftop solar payback periods in India are typically under six years.",
+      "passage": "Net metering rules differ by state, and several discoms have capped the sanctioned load eligible for export credit, complicating the picture for households." },
+
+    { "id": "dropout-para", "kind": "paraphrase", "supports": true,
+      "claim": "Early warning systems can identify students at risk of dropping out.",
+      "passage": "Models built on attendance and assessment data flagged a majority of eventual leavers well before they withdrew, giving staff time to intervene." },
+
+    { "id": "dropout-partial", "kind": "partial", "supports": true,
+      "claim": "Attendance is the strongest single predictor of dropout.",
+      "passage": "Of the variables tested, attendance carried by far the greatest weight in the model." },
+
+    { "id": "dropout-generic", "kind": "generic", "supports": false,
+      "claim": "Attendance is the strongest single predictor of dropout.",
+      "passage": "Student retention is influenced by academic, financial and personal factors, and institutions take a variety of approaches to supporting learners through their studies." },
+
+    { "id": "dropout-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Early warning systems can identify students at risk of dropping out.",
+      "passage": "Data protection officers have raised concerns about the retention period for behavioural analytics collected through campus learning platforms." },
+
+    { "id": "aqi-para", "kind": "paraphrase", "supports": true,
+      "claim": "Low-cost particulate sensors drift and need periodic recalibration.",
+      "passage": "Inexpensive optical PM sensors lose accuracy over months of deployment and must be re-referenced against a calibrated instrument to remain usable." },
+
+    { "id": "aqi-embedded", "kind": "embedded", "supports": true,
+      "claim": "Classroom air quality worsens measurably by the end of a lesson.",
+      "passage": "Loggers were placed at desk height in six rooms. Temperature stayed within a narrow band throughout. Carbon dioxide, however, climbed steadily from the start of each period and was well above the recommended ceiling by the closing minutes." },
+
+    { "id": "aqi-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Classroom air quality worsens measurably by the end of a lesson.",
+      "passage": "Mechanical ventilation was retrofitted in the science block during the summer break, funded from the same grant that paid for the new laboratory benches." },
+
+    { "id": "aqi-unrelated", "kind": "unrelated", "supports": false,
+      "claim": "Low-cost particulate sensors drift and need periodic recalibration.",
+      "passage": "Ticket sales for the festival opened on Monday and the first allocation was exhausted within four hours, prompting organisers to release a second batch." },
+
+    { "id": "waterlog-para", "kind": "paraphrase", "supports": true,
+      "claim": "Urban flooding in Indian cities is driven more by blocked drains than by rainfall intensity.",
+      "passage": "Analysis of flood events found that drainage obstruction, rather than the severity of the rain itself, explained most of the waterlogging recorded in the study area." },
+
+    { "id": "waterlog-contradictory", "kind": "contradictory", "supports": false,
+      "claim": "Urban flooding in Indian cities is driven more by blocked drains than by rainfall intensity.",
+      "passage": "The study concluded that extreme short-duration rainfall was the dominant factor, overwhelming drainage networks that were performing to specification." },
+
+    { "id": "waterlog-generic", "kind": "generic", "supports": false,
+      "claim": "Urban flooding in Indian cities is driven more by blocked drains than by rainfall intensity.",
+      "passage": "Cities face growing climate risks and are investing in resilience planning, infrastructure upgrades and improved emergency response arrangements." },
+
+    { "id": "ecom-para", "kind": "paraphrase", "supports": true,
+      "claim": "Return rates in online apparel are far higher than in other categories.",
+      "passage": "Clothing sees returns at a multiple of the rate observed for electronics or household goods, largely because of sizing." },
+
+    { "id": "ecom-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Return rates in online apparel are far higher than in other categories.",
+      "passage": "Free returns have become a competitive expectation in apparel retail, and several platforms now absorb the reverse logistics cost entirely." },
+
+    { "id": "ecom-partial", "kind": "partial", "supports": true,
+      "claim": "Sizing inconsistency between brands causes most apparel returns.",
+      "passage": "Where a reason was given, the great majority of clothing returns came down to fit, which shoppers attributed to sizes meaning different things across labels." },
+
+    { "id": "crop-para", "kind": "paraphrase", "supports": true,
+      "claim": "Leaf-image models can diagnose common crop diseases from a phone photograph.",
+      "passage": "A convolutional model trained on leaf photographs identified the frequent foliar diseases from images captured on ordinary smartphones." },
+
+    { "id": "crop-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Leaf-image models can diagnose common crop diseases from a phone photograph.",
+      "passage": "Extension officers visit each village roughly once a fortnight, and farmers report that advice often arrives after the point at which treatment would have helped." },
+
+    { "id": "crop-contradictory", "kind": "contradictory", "supports": false,
+      "claim": "Leaf-image models reach over 95 percent accuracy in field conditions.",
+      "passage": "Accuracy fell sharply outside the laboratory, dropping to around sixty per cent on photographs taken in real fields under variable light." },
+
+    { "id": "crop-generic", "kind": "generic", "supports": false,
+      "claim": "Leaf-image models can diagnose common crop diseases from a phone photograph.",
+      "passage": "Artificial intelligence is transforming agriculture, with applications spanning the value chain from sowing decisions through to market linkage." },
+
+    { "id": "hostel-para", "kind": "paraphrase", "supports": true,
+      "claim": "Students say mess menus are decided without consulting them.",
+      "passage": "Residents reported that the weekly menu is fixed by the contractor and warden with no student input, a complaint raised repeatedly in feedback sessions." },
+
+    { "id": "hostel-embedded", "kind": "embedded", "supports": true,
+      "claim": "Headcount for dinner is far less predictable than for lunch.",
+      "passage": "Kitchen records were examined over a full term. Breakfast attendance was stable. Lunch varied within a narrow range tied to the timetable. The evening meal was the difficult one: numbers swung widely from night to night with no pattern the staff could anticipate." },
+
+    { "id": "hostel-adjacent", "kind": "adjacent", "supports": false,
+      "claim": "Headcount for dinner is far less predictable than for lunch.",
+      "passage": "The mess operates on a fixed monthly charge per resident, billed in advance, with no rebate for meals not taken." },
+
+    { "id": "hostel-unrelated", "kind": "unrelated", "supports": false,
+      "claim": "Students say mess menus are decided without consulting them.",
+      "passage": "The satellite completed its orbit-raising manoeuvres on schedule and is expected to begin routine operations after a two-month commissioning phase." }
+  ]
+}
