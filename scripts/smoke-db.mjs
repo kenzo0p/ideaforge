@@ -1189,6 +1189,20 @@ console.log("\n\x1b[1mcohort import (delimited parsing)\x1b[0m");
   eq("a sheet with no idea column is refused, not guessed",
      csv.parseSubmissions("foo,bar\n1,2\n").rows.length, 0);
   eq("empty input parses to nothing", csv.parseSubmissions("").rows.length, 0);
+
+  // The export has to be re-readable by the reader beside it. A report whose
+  // own CSV this parser choked on would be an embarrassing thing to ship next
+  // to a citation checker.
+  const out = csv.toCsv([
+    ["Student", "Title", "Idea"],
+    ["Aarav", 'Mess waste, predicted', 'He said "cut it" — and\nmeant it'],
+    ["Diya", "Plain", "Nothing special"],
+  ]);
+  const round = csv.parseDelimited(out);
+  eq("a comma in an exported field survives the round trip", round[1][1], "Mess waste, predicted");
+  eq("so do quotes and newlines", round[1][2], 'He said "cut it" — and\nmeant it');
+  eq("a field needing no quoting is left alone", round[2][1], "Plain");
+  ok("only the fields that need quotes get them", out.includes("Diya,Plain,"));
 }
 
 console.log("\n\x1b[1mcohort report\x1b[0m");

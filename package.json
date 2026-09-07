@@ -15,7 +15,8 @@
     "eval:baseline": "node scripts/eval/run.mjs --update-baseline",
     "eval:publish": "node scripts/eval/run.mjs --repeat=3 --publish",
     "eval:claims": "node --experimental-strip-types --import ./scripts/ts-resolve-register.mjs scripts/eval/calibrate-claims.mjs",
-    "eval:sample": "node --env-file-if-exists=.env.local scripts/eval/sample-pairs.mjs"
+    "eval:sample": "node --env-file-if-exists=.env.local scripts/eval/sample-pairs.mjs",
+    "eval:generate": "node --experimental-strip-types --import ./scripts/ts-resolve-register.mjs --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/eval/generate-pairs.mjs"
   },
   "dependencies": {
     "@xenova/transformers": "^2.17.2",

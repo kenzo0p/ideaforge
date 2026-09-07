@@ -221,3 +221,28 @@ export function parseSubmissions(text: string): ParseResult {
 
   return { rows: out, skipped, columns };
 }
+
+
+// ---------------------------------------------------------------------------
+// And back out again.
+//
+// A cohort report that can only be read on screen is a report a department head
+// cannot circulate, sort, or paste into the spreadsheet the rest of their
+// process already lives in. The printable view covers "send this to the
+// examiners"; this covers "work with it".
+//
+// The same quoting rules as the reader, because a report whose own export it
+// could not re-read would be an embarrassing thing to ship next to a citation
+// checker.
+// ---------------------------------------------------------------------------
+
+/** Quote a field if — and only if — it would otherwise be misread. */
+function escapeField(value: string): string {
+  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+export function toCsv(rows: Array<Array<string | number | null>>): string {
+  return rows
+    .map((row) => row.map((cell) => escapeField(cell === null ? "" : String(cell))).join(","))
+    .join("\r\n");
+}

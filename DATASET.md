@@ -76,12 +76,27 @@ found hardest, and writes them out **with the verdict removed** — so whoever l
 judging the pair rather than agreeing with the machine. Labelling is a human step and there
 is no way around it; what the tool removes is every excuse not to do it.
 
+There are two ways to get pairs, depending on whether real briefings exist yet.
+
 ```bash
-npm run eval:sample -- --out=unlabelled.json --limit=40
+# From briefings already checked in this deployment:
+npm run eval:sample   -- --out=unlabelled.json --limit=40
+
+# Or generate fresh ones. Runs the real pipeline — live model, live search —
+# on seed ideas spread across domains, and costs API credit. Nothing is
+# written to the database, and it refuses to run on the mock provider rather
+# than calibrate the thresholds against templated text.
+npm run eval:generate -- --ideas=5 --out=unlabelled.json
+
 # ... a person sets "supports" on each pair ...
 node scripts/eval/sample-pairs.mjs --merge=unlabelled.json
 npm run eval:claims
 ```
+
+**Who labels them matters more than how many.** The first limitation above is that the
+pairs were written by whoever chose the thresholds; labelling the new ones yourself
+reproduces exactly that bias, and does so while looking like independent validation, which
+is worse than the current state. Give the file to someone who did not pick the cut-offs.
 
 Pairs merged this way are marked `"kind": "real"`. When those outnumber the hand-written
 ones, the numbers in this repo stop being a calibration and start being a result — and this

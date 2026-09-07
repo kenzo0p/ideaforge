@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sheet } from "lucide-react";
 import CohortImport from "@/components/CohortImport";
 import CohortReportView from "@/components/CohortReportView";
 import PrintTrigger from "@/components/PrintTrigger";
@@ -61,7 +61,16 @@ export default function CohortWorkbench({
 
       {report && !pending && (
         <section className="mt-5 rounded-2xl border border-border bg-card p-5">
-          <div className="no-print mb-4 flex justify-end">
+          <div className="no-print mb-4 flex flex-wrap justify-end gap-2">
+            {/* A spreadsheet, because that is where the rest of a department's
+                process already lives. Printing is for circulating; this is for
+                working with. */}
+            <a
+              href={`/org/cohorts/export?batch=${encodeURIComponent(report.batch)}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border-strong px-3.5 py-2 text-sm font-medium transition hover:bg-hover"
+            >
+              <Sheet className="size-4" /> Export CSV
+            </a>
             <PrintTrigger auto={false} />
           </div>
           <CohortReportView report={report} />

@@ -14,6 +14,30 @@ const EXAMPLE = `Roll No,Student Name,Project Title,Idea Description
 21CS002,Diya Nair,Lab Matcher,"Match students to research labs by their coursework interests"`;
 
 /**
+ * A batch to try it on.
+ *
+ * The first thing anyone evaluating this asks is "show me", and the honest
+ * answer used to be "prepare a spreadsheet first".
+ *
+ * Two pairs here describe the same project in different words. Only one of them
+ * crosses the threshold — the other measures 0.646 against a 0.70 cut-off, and
+ * is reported as distinct. That is left in deliberately. A demo tuned so
+ * everything it plants is found teaches the reader that the tool is infallible,
+ * which is both untrue and the opposite of what this product argues; a
+ * conservative threshold missing a real pair is what the trade-off actually
+ * looks like, and it is better seen than described.
+ */
+const SAMPLE = `Roll No,Student Name,Project Title,Idea Description
+21CS001,Aarav Shah,Mess Forecast,"A tool that predicts how many students will eat dinner in the hostel mess so the kitchen cooks less and wastes less"
+21CS002,Diya Nair,Lab Matcher,"A platform connecting undergraduates with professors' research labs based on their coursework and interests"
+21CS003,Kabir Das,Meal Demand,"Predicting hostel dinner headcount ahead of time so kitchens can reduce over-preparation and food waste"
+21CS004,Meera Rao,Air Watch,"A low-cost sensor that logs classroom carbon dioxide through the day and flags poorly ventilated rooms"
+21CS005,Rohan Iyer,Research Connect,"Helping students find professors whose labs match what they have studied and want to work on"
+21CS006,Sana Qureshi,Drain Sense,"Ranking municipal drains by how likely they are to block and cause waterlogging during monsoon"
+21CS007,Vikram Menon,Solar Check,"Checking whether a rooftop solar installation quote is fairly priced against local benchmarks"
+21CS008,Ananya Bose,Viva Prep,"Generating likely viva questions from a student's own project report so they can rehearse"`;
+
+/**
  * Bring a cohort's submissions in from wherever they already are.
  *
  * A paste box rather than a file picker, because the submissions are usually in
@@ -104,6 +128,21 @@ export default function CohortImport({
           />
         </label>
       </div>
+
+      <p className="text-[11px] text-muted">
+        <button
+          onClick={() => {
+            setBatch(batch || "Sample batch");
+            setSheet(SAMPLE);
+          }}
+          className="underline hover:text-foreground"
+        >
+          Fill in a sample batch
+        </button>{" "}
+        to see what the report looks like. Eight proposals, containing two pairs that are
+        arguably the same project — the grouping finds one of them and rates the other as
+        distinct, which is what a threshold set to avoid false accusations costs you.
+      </p>
 
       <p className="text-[11px] text-muted">
         Paste straight from a spreadsheet — commas or tabs, quoted fields, either line ending.

@@ -524,7 +524,8 @@ npm run eval:claims                  # sweep, print the table and the ablation
 npm run eval:claims -- --assert      # the same, as a gate (exits 1 on regression)
 npm run eval:claims -- --model=lexical --entail=none   # ablations
 
-npm run eval:sample -- --out=unlabelled.json --limit=40   # sample real pairs to label
+npm run eval:sample   -- --out=unlabelled.json --limit=40  # pairs from checks already run
+npm run eval:generate -- --ideas=5 --out=unlabelled.json   # or generate fresh ones (costs credit)
 ```
 `eval:sample` pulls the pairs the model found hardest out of briefings that have actually
 been checked, **with the verdict removed** — so whoever labels them is judging the pair
