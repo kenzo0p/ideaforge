@@ -194,6 +194,26 @@ export default async function OrgPage() {
 
         {novelty && <CohortNovelty report={novelty} />}
 
+        {canMentor && (
+          <section className="rounded-2xl border border-border bg-card p-5">
+            <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+              <Users className="size-4 text-brand" />
+              Cohort submissions
+            </h2>
+            <p className="mb-3 max-w-prose text-xs text-muted">
+              The overlap check above covers projects created here. To check a batch of
+              proposals that were submitted somewhere else — a sheet, a form, an email
+              thread — import them and compare them as a cohort. No student accounts needed.
+            </p>
+            <Link
+              href="/org/cohorts"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border-strong px-3 py-1.5 text-xs font-medium transition hover:bg-hover"
+            >
+              Import and compare a batch
+            </Link>
+          </section>
+        )}
+
         <section className="rounded-2xl border border-border bg-card p-5">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
             <Users className="size-4 text-brand" />

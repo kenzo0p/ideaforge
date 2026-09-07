@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to the same PR makes the first run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Types, lint, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npx eslint src
+      - name: Build
+        run: npm run build
+      - name: Contrast (WCAG AA, both themes)
+        run: npm run check:contrast
+
+  database:
+    name: Repository suite
+    runs-on: ubuntu-latest
+    services:
+      # The suite is written against a real MongoDB on purpose — it asserts
+      # index behaviour, TTL reaping and delete cascades, none of which a fake
+      # would reproduce. So CI runs a real one.
+      mongo:
+        image: mongo:8
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      MONGODB_URI: mongodb://localhost:27017
+      MONGODB_DB: scrutan_ci
+      # The neural embedder needs a model download the repository suite does not
+      # depend on; the lexical one exercises the same code paths without it.
+      EMBEDDING_PROVIDER: lexical
+      ENTAILMENT_PROVIDER: none
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Repository and verification suite
+        run: npm run test:db
+
+  calibration:
+    name: Claim-support calibration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Models are fetched once and reused; without this every run pays a
+      # minute of downloads to compute the same numbers.
+      - name: Cache models
+        uses: actions/cache@v4
+        with:
+          path: node_modules/@xenova/transformers/.cache
+          key: xenova-${{ runner.os }}-v1
+      # The sweep prints the table; --assert turns it into a gate that fails
+      # when the labelled pairs stop separating — a prompt edit, a model swap,
+      # or a threshold someone widened by hand.
+      - name: Sweep and assert the calibration still holds
+        run: npm run eval:claims -- --assert

@@ -22,10 +22,16 @@ export default async function Home({
     <main className="mx-auto w-full max-w-6xl px-5 py-10 sm:py-16">
       {/* Header */}
       <header className="mb-10">
-        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted">
+        {/* The strongest thing this product does needs no account, so the
+            first thing on the page is a way to try it without one. */}
+        <Link
+          href="/verify"
+          className="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted transition hover:border-brand/50 hover:text-foreground"
+        >
           <span className="size-1.5 rounded-full bg-success" />
-          Every cited source is fetched and checked
-        </div>
+          Every cited source is fetched and checked —
+          <span className="font-medium text-brand">try it on any AI answer</span>
+        </Link>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
           <span className="bg-gradient-to-r from-brand to-brand-2 bg-clip-text text-transparent">
             Scrutan

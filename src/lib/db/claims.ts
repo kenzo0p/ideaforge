@@ -36,7 +36,10 @@ export async function getClaims(projectId: string): Promise<ClaimReport | null> 
   const { _id, userId, ...report } = d;
   void _id;
   void userId;
-  return report;
+  // Reports stored before contradiction detection existed name no entailer.
+  // "unknown" rather than "none": nobody recorded which it was, and claiming it
+  // was disabled would be inventing a fact about a past run.
+  return { ...report, entailer: report.entailer ?? "unknown" };
 }
 
 /** Headline numbers only, for listing surfaces. */

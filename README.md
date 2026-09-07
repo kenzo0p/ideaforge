@@ -13,6 +13,14 @@ sounds; it is what fraction of its evidence survived being checked.
 > architecture → roadmap → tech stack → repos, APIs & datasets → timeline → deck-ready docs
 > → **a grounding score over every source cited.**
 
+### Check somebody else's answer
+
+`/verify` takes the same engine and points it outward. Paste an answer from ChatGPT,
+Perplexity or anywhere else along with its sources: every URL is opened, every sentence is
+matched against the source it cited, and six citations tracing to one press release are
+reported as one source. No account needed — it is the most persuasive thing the product
+does, and it was previously visible only to people who had already signed up.
+
 ### What it refuses to do
 
 - **Invent a link.** The model is handed numbered search results and can only cite by
@@ -40,6 +48,7 @@ sounds; it is what fraction of its evidence survived being checked.
 | **Keep** | MongoDB-backed projects, version history, workspaces, comments, collaborators, live updates |
 | **Share** | Public/unlisted briefs, `.pptx` / `.docx` / `.md` / PDF export, Notion and Google Docs push |
 | **Audit a cohort** | Every idea in a workspace compared against every other; lookalikes grouped for a guide to read side by side |
+| **Import a batch** | Paste sixty proposals from a spreadsheet — no student accounts needed — and get a printable distinctiveness report |
 | **Around it** | Orgs with domain join, plans and entitlements, Telegram agent, reminders, 8 languages |
 
 ## Architecture
@@ -83,9 +92,16 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   calibration produced the finding the design now turns on: **passages that contradict a
   claim score higher on average (0.554) than passages that genuinely paraphrase it (0.531)**,
   because an embedding encodes subject matter and a denial is about the same subject as the
-  assertion it denies. No threshold can separate them, so the two catchable cases are
-  checked literally instead — figures (including spelled-out ones, in either notation) and
-  explicit refutations scoped to the claim's own subject. The cut-offs are stored **per
+  assertion it denies. No threshold can separate them, so contradiction is decided three
+  other ways, and the ablation in `eval:claims` shows none of them subsumes another:
+  a **local NLI cross-encoder** (`entail.ts`) that reads passage and claim together,
+  literal figure checks (including spelled-out percentages and quantities, matched across
+  notations), and explicit refutation phrases scoped to the claim's own subject. Together
+  they catch 6 of 6 contradictions in the calibration set with no false positives on 22
+  supported pairs; entailment alone catches 4, and is the only one that reaches a passage
+  arguing the opposite in words no phrase list contains. It is used for contradiction
+  **only** — strict NLI calls a claim `neutral` whenever the passage does not restate its
+  full scope, so the embedder stays the better judge of support. The cut-offs are stored **per
   model**, because the two embedders live in different numeric ranges and sharing a constant
   would put every claim below the weak bar on the fallback, telling every user their whole
   briefing was fabricated. An uncalibrated model produces no verdicts at all.
@@ -118,6 +134,16 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   already proposed this?" within a workspace. Two implementations with measured, documented
   behaviour: the neural one separates paraphrases from unrelated ideas, the lexical fallback
   demonstrably cannot, and it says so in the log rather than pretending.
+- **`lib/verify/safe-fetch.ts`** — the guard that makes a public check possible. Every fetch
+  in the product goes through it, because an endpoint that opens URLs a stranger supplied is
+  a proxy running inside our network, and the interesting targets are not on the internet:
+  `169.254.169.254` hands out cloud instance credentials to anything that can make an HTTP
+  request. So the host is resolved, every address it answers with is checked against the
+  non-routable ranges (IPv4, IPv6, and IPv4-mapped IPv6, which is how a private address gets
+  past a checker that only understands one family), and redirects are followed **one hop at a
+  time re-checking each** — `redirect: "follow"` is the whole vulnerability, since a URL that
+  passes inspection can hand the connection to one that would not. The residual DNS-rebinding
+  window is documented in the file rather than papered over.
 - **`lib/plan`** — the same move as citation verification, applied to the roadmap. A model
   asked for a timeline produces something that *reads* like a schedule; nothing checks that
   milestone four can start when it says it does. Given the durations and dependencies the
@@ -160,6 +186,20 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   taking the better of their own subscription and their workspace's; `entitlements.ts` is the
   only place that answers "is this allowed?", so a gate can never be enforced in one route and
   forgotten in its sibling.
+- **`lib/cohorts` + `lib/db/cohorts`** — the supervisor's path. The workspace overlap view
+  compares projects created here; the question a department head has arrives before any of
+  that — sixty proposals in a spreadsheet, due Friday, and no way to know how many are the
+  same project. So a batch is pasted straight in and compared as a corpus of its own, with
+  no student accounts involved. That needs a real delimited-text reader rather than
+  `split(",")`: project ideas are sentences and sentences have commas, titles have quotes,
+  and an exported cell can contain a newline — so RFC 4180 quoting, doubled-quote escapes,
+  both line endings, byte-order marks, and tab detection because that is what copying out of
+  a spreadsheet actually puts on the clipboard. Columns are matched by name on **word
+  boundaries**, after substring matching read a column of descriptions as the student
+  identifier (`id` is inside `Idea`). Unusable rows are reported by line number rather than
+  dropped, because a silent import that discarded nine of sixty rows produces a report that
+  looks complete and is not. Clustering is the same `clusterVectors` the workspace view
+  uses, at the same threshold, so a department cannot get one answer here and another there.
 - **`lib/db/orgs` + `lib/orgs`** — organisations: a lab, class, or cohort on one plan. Members
   join automatically by verified email domain, and mentors can read and comment on the whole
   workspace's projects without being invited to each one. Domain claims are checked against the
@@ -193,6 +233,12 @@ npm run test:db          # every repository function, against a real MongoDB
 npm run check:contrast   # WCAG AA contrast across the palette, both themes
 npm run eval             # output quality against the golden set (needs a live model)
 ```
+
+`npm run eval:claims` sweeps the claim-support thresholds against the labelled set in
+[`DATASET.md`](DATASET.md) and, with `--assert`, fails when the classes stop separating —
+that is the gate CI runs on every pull request. `npm run eval:sample` pulls the hardest
+pairs out of real briefings for a human to label, with the machine's verdict removed so the
+labelling is a judgement rather than a review.
 
 `npm run eval` is the unusual one. The other two test that the code works; this tests
 whether the *answers* are any good — the part that decays silently when a prompt is edited

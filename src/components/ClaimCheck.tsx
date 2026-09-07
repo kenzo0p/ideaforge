@@ -47,6 +47,10 @@ export default function ClaimCheck({
   // verdicts that are real but should not be leaned on.
   const uncalibrated = report !== null && report.thresholds === null;
   const degraded = report !== null && !uncalibrated && report.model !== "minilm";
+  // A run with no entailer still produced real verdicts; what it could not do
+  // is spot a source arguing the opposite in words the phrase list misses.
+  // Saying so is the difference between "none found" and "none looked for".
+  const noEntailment = report !== null && !uncalibrated && report.entailer === "none";
 
   return (
     <div className="mt-5 rounded-2xl border border-border bg-card p-5">
@@ -92,6 +96,16 @@ export default function ClaimCheck({
             This ran on the fallback text model, whose supported and unsupported score
             ranges overlap heavily. The verdicts are calibrated but decide much less than
             they appear to — treat them as weak evidence.
+          </span>
+        </p>
+      )}
+
+      {noEntailment && (
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-border bg-surface p-2.5 text-[11px] text-muted">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Contradiction detection is off on this deployment, so a source arguing the
+            opposite of a claim may read here as merely unrelated.
           </span>
         </p>
       )}

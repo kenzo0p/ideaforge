@@ -5,6 +5,7 @@
 //   npm run eval:claims                  # sweep and report
 //   npm run eval:claims -- --model=lexical
 //   npm run eval:claims -- --json=out.json
+//   npm run eval:claims -- --assert       # exit 1 if the calibration degraded
 //
 // src/lib/verify/claims.ts turns a similarity into one of three verdicts, and
 // where the two cut-offs sit decides what the feature says about a briefing.
@@ -52,6 +53,8 @@ const { pairs, description } = JSON.parse(
 
 const { makeEmbedder, cosine } = await import("../../src/lib/similarity/index.ts");
 const { figuresMissingFrom, refutationIn } = await import("../../src/lib/verify/claims.ts");
+const { makeEntailer, CONTRADICTION_AT } = await import("../../src/lib/verify/entail.ts");
+const entailer = makeEntailer(args.entail === "none" ? "none" : "nli");
 const which = args.model === "lexical" ? "lexical" : "neural";
 const embedder = makeEmbedder(which);
 
@@ -70,17 +73,22 @@ for (const p of pairs) {
   const [a, b] = await embedder.embedAll([p.claim, p.passage]);
   const refuted = refutationIn(p.passage, p.claim);
   const missing = figuresMissingFrom(p.claim, p.passage);
+  const judged = await entailer.score(p.passage, p.claim);
+  const contradicted = judged !== null && judged.contradiction >= CONTRADICTION_AT;
   scored.push({
     ...p,
     score: cosine(a, b),
-    guard: refuted ? "refutation" : missing.length ? "figure" : null,
-    guardDetail: refuted ?? missing.join(", ") ?? null,
+    contradiction: judged?.contradiction ?? null,
+    guard: contradicted ? "entailment" : refuted ? "refutation" : missing.length ? "figure" : null,
+    guardDetail: contradicted
+      ? `${Math.round((judged?.contradiction ?? 0) * 100)}% contradiction`
+      : (refuted ?? (missing.length ? missing.join(", ") : null)),
   });
 }
 
 const guarded = scored.filter((p) => p.guard);
 const caughtNegatives = guarded.filter((p) => !p.supports).length;
-console.log(`${c.bold}Literal guards${c.off}  ${c.dim}applied before any threshold${c.off}`);
+console.log(`${c.bold}Guards${c.off}  ${c.dim}applied before any threshold · entailment: ${entailer.label}${c.off}`);
 console.log(
   `  ${caughtNegatives} of ${scored.filter((p) => !p.supports).length} negatives caught outright` +
     `  ${c.dim}(${guarded.filter((p) => p.supports).length} positives wrongly caught)${c.off}`,
@@ -219,6 +227,70 @@ if (args.json) {
   console.log(`\n${c.dim}Written to ${args.json}${c.off}`);
 }
 
+// Which guard caught what — the ablation. Each catches a set the others do not,
+// which is the argument for running all three rather than picking one.
+const contradictory = scored.filter((p) => p.kind === "contradictory");
+if (contradictory.length) {
+  console.log(`\n${c.bold}Contradictions, by what caught them${c.off}`);
+  for (const p of contradictory) {
+    const by = p.guard ?? `${c.fail}MISSED${c.off}`;
+    const nli = p.contradiction === null ? "  —  " : p.contradiction.toFixed(3);
+    console.log(`  ${nli}  ${p.id.padEnd(28)} ${by}`);
+  }
+  const caught = contradictory.filter((p) => p.guard).length;
+  const colour = caught === contradictory.length ? c.pass : c.warn;
+  console.log(`  ${colour}${caught}/${contradictory.length} caught${c.off}`);
+}
+
 console.log(
   `\n${c.dim}These pairs are hand-written to sit near the boundary. They calibrate the thresholds; they do not measure accuracy on real briefings.${c.off}`,
 );
+
+// --- The gate ---------------------------------------------------------------
+//
+// Everything above is a report someone has to read. This turns the same numbers
+// into a pass/fail, so a change that quietly destroys the separation fails a
+// pull request instead of being noticed months later.
+//
+// The assertions are properties, not exact values: a model update that moves
+// every score by a few points but keeps the classes apart should pass, and one
+// that starts calling supported claims contradictions should not.
+if (args.assert) {
+  const failures = [];
+
+  if (!supportedAt) {
+    failures.push(`no threshold reaches ${pctOf(PRECISION_TARGET).trim()} precision — "supported" cannot be said reliably`);
+  }
+  if (!weakAt) {
+    failures.push(`no threshold retains ${pctOf(RECALL_TARGET).trim()} recall — "not in the source" would be said too often`);
+  }
+
+  const wronglyGuarded = guarded.filter((p) => p.supports);
+  if (wronglyGuarded.length > 0) {
+    failures.push(
+      `${wronglyGuarded.length} genuinely supported pair(s) were caught by a guard: ` +
+        wronglyGuarded.map((p) => p.id).join(", "),
+    );
+  }
+
+  const missedContradictions = scored.filter((p) => p.kind === "contradictory" && !p.guard);
+  if (missedContradictions.length > 0) {
+    failures.push(
+      `${missedContradictions.length} contradiction(s) caught by nothing: ` +
+        missedContradictions.map((p) => p.id).join(", "),
+    );
+  }
+
+  if (supportedAt && weakAt && supportedAt.t - weakAt.t > 0.35) {
+    failures.push(
+      `the undecided band is ${(supportedAt.t - weakAt.t).toFixed(2)} wide — the model has stopped discriminating`,
+    );
+  }
+
+  if (failures.length) {
+    console.log(`\n${c.fail}${c.bold}CALIBRATION FAILED${c.off}`);
+    for (const f of failures) console.log(`  ${c.fail}✗${c.off} ${f}`);
+    process.exit(1);
+  }
+  console.log(`\n${c.pass}Calibration holds.${c.off}`);
+}

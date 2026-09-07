@@ -29,6 +29,9 @@ const vfy = await import("../src/lib/verify/citations.ts");
 const gnd = await import("../src/lib/db/grounding.ts");
 const seg = await import("../src/lib/verify/segment.ts");
 const clm = await import("../src/lib/verify/claims.ts");
+const entail = await import("../src/lib/verify/entail.ts");
+const csv = await import("../src/lib/cohorts/parse.ts");
+const coh = await import("../src/lib/db/cohorts.ts");
 const clmdb = await import("../src/lib/db/claims.ts");
 const shg = await import("../src/lib/verify/shingle.ts");
 const evd = await import("../src/lib/verify/evidence.ts");
@@ -37,6 +40,8 @@ const shash = await import("../src/lib/verify/simhash.ts");
 const indep = await import("../src/lib/verify/independence.ts");
 const sched = await import("../src/lib/plan/schedule.ts");
 const cons = await import("../src/lib/verify/consistency.ts");
+const safe = await import("../src/lib/verify/safe-fetch.ts");
+const ext = await import("../src/lib/verify/external.ts");
 const ent2 = await import("../src/lib/billing/resolve.ts");
 const dom = await import("../src/lib/orgs/domains.ts");
 const ent = await import("../src/lib/billing/plans.ts");
@@ -996,6 +1001,15 @@ console.log("\n\x1b[1mclaim-level verification\x1b[0m");
   eq("a figure present in the source is not",
      clm.figuresMissingFrom("Waste costs 40 crore a year.", "It runs to 40 crore annually."),
      []);
+  // A digit followed by the spelled unit. "over 95 percent" slipped past a
+  // pattern that only knew "%", which is how a fabricated accuracy figure went
+  // unflagged until the calibration set caught it.
+  eq("a percentage written as a word is checked",
+     clm.figuresMissingFrom("Models reach over 95 percent accuracy.", "Accuracy fell to around sixty per cent."),
+     ["95 percent"]);
+  eq("and matches when the source agrees",
+     clm.figuresMissingFrom("Models reach over 95 percent accuracy.", "Accuracy held at 95% in the field."),
+     []);
   eq("a spelled-out quantity is checked too",
      clm.figuresMissingFrom("Payback is under six years.", "Payback runs to eleven or twelve years."),
      ["six years"]);
@@ -1131,6 +1145,233 @@ console.log("\n\x1b[1mcontent fingerprints and drift\x1b[0m");
   await p.deleteProject(proj.id, owner.id);
   eq("deleting a project purges its fingerprints", (await snap.getSnapshots(proj.id)).length, 0);
   await u.deleteUser(owner.id);
+}
+
+console.log("\n\x1b[1mcohort import (delimited parsing)\x1b[0m");
+{
+  // Everything a real spreadsheet export actually contains.
+  const rows = csv.parseDelimited('a,"b,with,commas",c\r\n"say ""hi""",plain,"multi\nline"\n');
+  eq("a quoted field keeps its commas", rows[0][1], "b,with,commas");
+  eq("a doubled quote is a literal quote", rows[1][0], 'say "hi"');
+  eq("a field may contain a newline", rows[1][2], "multi\nline");
+  eq("CRLF does not leave a stray carriage return", rows[0][2], "c");
+  eq("a trailing newline makes no phantom row", rows.length, 2);
+
+  eq("tab-separated data is detected", csv.sniffDelimiter("a\tb\tc\n1\t2\t3"), "\t");
+  eq("comma-separated data is detected", csv.sniffDelimiter("a,b,c\n1,2,3"), ",");
+  eq("European semicolons are detected", csv.sniffDelimiter("a;b;c\n1;2;3"), ";");
+
+  const sheet =
+    "\ufeffRoll No,Student Name,Project Title,Idea Description\n" +
+    '21CS001,Aarav Shah,"Mess waste, predicted","A campus tool that forecasts hostel dinner headcount"\n' +
+    "21CS002,Diya Nair,Lab Matcher,\"Matches students to research labs by their interests\"\n" +
+    "21CS003,Rohan Iyer,,\n" +
+    "21CS004,Meera Rao,Short,tiny\n";
+  const parsed = csv.parseSubmissions(sheet);
+
+  eq("usable rows are kept", parsed.rows.length, 2);
+  eq("a byte-order mark does not break the first header", parsed.columns.studentRef, "Roll No");
+  eq("the idea column is found by name", parsed.columns.idea, "Idea Description");
+  eq("a comma inside a quoted title survives", parsed.rows[0].title, "Mess waste, predicted");
+  eq("an empty row is reported with its line number",
+     parsed.skipped.find((x) => x.line === 4)?.why, "No idea text.");
+  ok("and one too short to compare says so",
+     parsed.skipped.some((x) => x.line === 5 && x.why.includes("too short")));
+
+  // "id" is a substring of "Idea": matching on substrings assigned the
+  // description column as the student identifier until this was word-bounded.
+  const tsv = csv.parseSubmissions("Name\tTitle\tIdea\nAsha\tSolar\tRooftop solar payback estimator for households\n");
+  eq("a tabbed clipboard paste is read", tsv.rows.length, 1);
+  eq("the idea column is not stolen by a short alias", tsv.columns.idea, "Idea");
+  eq("and the student reference stays unassigned rather than wrong",
+     tsv.columns.studentRef, undefined);
+
+  eq("a sheet with no idea column is refused, not guessed",
+     csv.parseSubmissions("foo,bar\n1,2\n").rows.length, 0);
+  eq("empty input parses to nothing", csv.parseSubmissions("").rows.length, 0);
+}
+
+console.log("\n\x1b[1mcohort report\x1b[0m");
+{
+  const org = `org-${Date.now()}`;
+  const row = (studentName, title, idea) => ({ studentName, studentRef: null, title, idea });
+
+  const outcome = await coh.importCohort({
+    orgId: org, batch: "2026",
+    rows: [
+      row("Aarav", "Mess Forecast", "A campus tool that matches students to research labs by interest"),
+      row("Diya", "Lab Finder", "A campus tool that matches students to research labs by interest"),
+      row("Kabir", "Air Monitor", "A hardware sensor that measures classroom air quality each period"),
+    ],
+  });
+  eq("every row is imported", outcome.imported, 3);
+  eq("with none failing", outcome.failed, 0);
+
+  const batches = await coh.listBatches(org);
+  eq("the batch is listed", batches.length, 1);
+  eq("with its count", batches[0].count, 3);
+
+  const report = await coh.cohortReport({ orgId: org, batch: "2026" });
+  eq("every submission is scored", report.submissions.length, 3);
+  eq("two identical proposals are grouped", report.groups.length, 1);
+  eq("and the group holds both", report.groups[0].ids.length, 2);
+  eq("both are counted as clustered", report.clustered, 2);
+
+  const kabir = report.submissions.find((x) => x.studentName === "Kabir");
+  const aarav = report.submissions.find((x) => x.studentName === "Aarav");
+  ok("a distinct proposal scores high on distinctiveness", kabir.novelty > 0.5);
+  ok("a duplicated one scores low", aarav.novelty < 0.3);
+  eq("and names who it resembles", aarav.resembles.length, 1);
+  eq("the distinct one resembles nobody", kabir.resembles.length, 0);
+
+  // Re-import replaces rather than appends: correcting a sheet must not double
+  // every row and manufacture a batch full of duplicates.
+  await coh.importCohort({ orgId: org, batch: "2026", rows: [row("Aarav", "Mess Forecast", "A campus tool that matches students to research labs by interest")] });
+  eq("re-importing a batch replaces it", (await coh.listBatches(org))[0].count, 1);
+
+  eq("another workspace sees none of it",
+     (await coh.cohortReport({ orgId: "someone-else", batch: "2026" })).submissions.length, 0);
+
+  eq("a batch can be deleted", await coh.deleteBatch(org, "2026"), 1);
+  eq("and is then gone", (await coh.listBatches(org)).length, 0);
+}
+
+console.log("\n\x1b[1mentailment (contradiction detection)\x1b[0m");
+{
+  const off = entail.makeEntailer("none");
+  eq("a disabled entailer names itself", off.id, "none");
+  eq("and returns no judgement rather than a zero", await off.score("a", "b"), null);
+
+  const nli = entail.makeEntailer("nli");
+  const judged = await nli.score(
+    "The study concluded that extreme short-duration rainfall was the dominant factor, " +
+      "overwhelming drainage networks that were performing to specification.",
+    "Urban flooding in Indian cities is driven more by blocked drains than by rainfall intensity.",
+  );
+
+  if (judged === null) {
+    console.log("  \x1b[33m⚠ entailment model unavailable — skipping (this is a supported state)\x1b[0m");
+  } else {
+    ok("the three labels sum to one",
+       Math.abs(judged.contradiction + judged.entailment + judged.neutral - 1) < 0.01);
+    ok("a passage arguing the opposite is called a contradiction",
+       judged.contradiction >= entail.CONTRADICTION_AT);
+    // The one the phrase list could not reach: no refutation vocabulary appears
+    // in that passage at all, and this is why the model earns its memory.
+    eq("and the phrase list alone would have missed it",
+       clm.refutationIn(
+         "The study concluded that extreme short-duration rainfall was the dominant factor.",
+         "Urban flooding is driven more by blocked drains than by rainfall intensity.",
+       ),
+       null);
+
+    const supported = await nli.score(
+      "Surveys of residential campus kitchens found that about 33 percent of cooked food is discarded.",
+      "Roughly a third of food prepared in college hostel messes is thrown away.",
+    );
+    ok("a genuinely supporting passage is not called a contradiction",
+       supported.contradiction < entail.CONTRADICTION_AT);
+  }
+}
+
+console.log("\n\x1b[1maddress guard (SSRF)\x1b[0m");
+{
+  // The addresses that matter. Cloud metadata first: it hands out instance
+  // credentials to anything inside the network that can make an HTTP request,
+  // which is exactly what a public "fetch this URL" endpoint is.
+  for (const [ip, note] of [
+    ["169.254.169.254", "cloud metadata"],
+    ["127.0.0.1", "loopback"],
+    ["10.1.2.3", "private /8"],
+    ["172.16.0.1", "private /12"],
+    ["192.168.1.1", "private /16"],
+    ["100.64.0.1", "carrier-grade NAT"],
+    ["0.0.0.0", "this network"],
+    ["::1", "IPv6 loopback"],
+    ["fd00::1", "IPv6 unique-local"],
+    ["fe80::1", "IPv6 link-local"],
+    ["::ffff:169.254.169.254", "IPv4-mapped metadata"],
+    ["not-an-ip", "unparseable"],
+  ]) {
+    ok(`${note} (${ip}) is refused`, safe.isPrivateAddress(ip));
+  }
+  for (const [ip, note] of [
+    ["8.8.8.8", "public IPv4"],
+    ["172.32.0.1", "just outside the private /12"],
+    ["2606:4700:4700::1111", "public IPv6"],
+    ["::ffff:8.8.8.8", "IPv4-mapped public"],
+  ]) {
+    ok(`${note} (${ip}) is allowed`, !safe.isPrivateAddress(ip));
+  }
+
+  eq("a metadata URL is blocked by address",
+     (await safe.checkUrl("http://169.254.169.254/latest/meta-data/")).reason, "private-address");
+  eq("localhost resolves to a private address and is blocked",
+     (await safe.checkUrl("http://localhost/")).reason, "private-address");
+  eq("a bracketed IPv6 loopback is blocked",
+     (await safe.checkUrl("http://[::1]/")).reason, "private-address");
+  eq("a non-web port is refused",
+     (await safe.checkUrl("http://example.com:27017/")).reason, "port");
+  eq("a file URL is refused", (await safe.checkUrl("file:///etc/passwd")).reason, "scheme");
+  eq("a javascript URL is refused",
+     (await safe.checkUrl("javascript:alert(1)")).reason, "scheme");
+  eq("a public URL passes", await safe.checkUrl("https://example.com/ok"), null);
+
+  // The guard must not describe what it resolved: doing so would turn the
+  // refusal message into the internal port scanner it exists to prevent.
+  const blocked = await safe.checkUrl("http://169.254.169.254/");
+  ok("the refusal never names the address it resolved",
+     !blocked.message.includes("169.254"));
+}
+
+console.log("\n\x1b[1mpublic answer checking\x1b[0m");
+{
+  const prep = ext.prepareSources([
+    "https://example.com/a", "  https://example.com/a#frag  ", "http://example.org/b",
+    "javascript:alert(1)", "not a url", "",
+    ...Array.from({ length: 14 }, (_, i) => `https://s${i}.example.com/`),
+  ]);
+  eq("sources are capped", prep.citations.length, ext.MAX_SOURCES);
+  eq("and numbered from one",
+     prep.citations.map((c) => c.id), Array.from({ length: ext.MAX_SOURCES }, (_, i) => i + 1));
+  eq("the same URL twice collapses rather than erroring",
+     prep.citations.filter((c) => c.url.includes("example.com/a")).length, 1);
+  ok("a non-http scheme is rejected with a reason",
+     prep.rejected.some((r) => r.url.includes("javascript") && r.why.includes("http")));
+  ok("so is something that is not a URL at all",
+     prep.rejected.some((r) => r.why === "Not a URL."));
+  ok("and the overflow says why it was dropped",
+     prep.rejected.some((r) => r.why.includes(String(ext.MAX_SOURCES))));
+
+  // Live network, against endpoints whose behaviour is fixed.
+  const report = await ext.verifyExternal({
+    text: [
+      "This domain is intended for use in illustrative examples within documents [1].",
+      "The domain handles 47.3 million requests every single day [1].",
+      "Quantum satellite mesh routing reduces orbital latency substantially [2].",
+    ].join("\n\n"),
+    urls: [
+      "https://example.com",
+      "https://example.com/definitely-missing-page-404",
+      "http://169.254.169.254/latest/meta-data/",
+    ],
+  });
+
+  eq("every source gets a status", report.sources.length, 3);
+  eq("a live page resolves", report.sources[0].status, "reachable");
+  eq("a 404 does not", report.sources[1].status, "dead");
+  eq("and a private address is refused rather than called dead",
+     report.sources[2].status, "blocked");
+  ok("the reachable ratio reflects that",
+     report.reachableRatio > 0 && report.reachableRatio < 1);
+
+  const byStart = (p) => report.claims.verdicts.find((v) => v.text.startsWith(p));
+  eq("a claim the source states is supported", byStart("This domain is").kind, "supported");
+  ok("a fabricated figure is caught",
+     byStart("The domain handles").unmatchedFigures.some((f) => f.includes("47.3")));
+  eq("a claim whose source would not load is unjudged, not condemned",
+     byStart("Quantum satellite").kind, "unavailable");
+  eq("two URLs on one domain are one source", report.independence.independent, 2);
 }
 
 console.log("\n\x1b[1mcross-artifact consistency\x1b[0m");
