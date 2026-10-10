@@ -1,3 +1,4 @@
+import { record } from "./usage";
 import type { AIProvider, ChatMessage, GenerateOptions } from "./types";
 
 // Minimal Anthropic Messages client (SSE streaming). Respects ANTHROPIC_BASE_URL
@@ -60,6 +61,13 @@ export class AnthropicProvider implements AIProvider {
     const decoder = new TextDecoder();
     let buffer = "";
 
+    // Anthropic reports the two halves at different moments: the input count
+    // arrives with `message_start`, before any text, and the output count with
+    // `message_delta` at the very end. Both are held until the stream closes so
+    // the call is recorded exactly once, with both halves present.
+    let inputTokens = 0;
+    let outputTokens = 0;
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -73,11 +81,27 @@ export class AnthropicProvider implements AIProvider {
           const json = JSON.parse(trimmed.slice(5).trim());
           if (json.type === "content_block_delta" && json.delta?.text) {
             yield json.delta.text as string;
+          } else if (json.type === "message_start") {
+            const u = json.message?.usage ?? {};
+            // Cached and cache-written input are still input the model read.
+            inputTokens =
+              (u.input_tokens ?? 0) +
+              (u.cache_read_input_tokens ?? 0) +
+              (u.cache_creation_input_tokens ?? 0);
+            outputTokens = u.output_tokens ?? 0;
+          } else if (json.type === "message_delta" && json.usage?.output_tokens != null) {
+            outputTokens = json.usage.output_tokens;
           }
         } catch {
           // Ignore event frames / keep-alives.
         }
       }
+    }
+
+    // Recorded on the way out, including when the caller stops reading early:
+    // a partial read still cost whatever the model had produced by then.
+    if (inputTokens || outputTokens) {
+      record({ inputTokens, outputTokens, estimated: false, provider: this.id, model: this.model });
     }
   }
 

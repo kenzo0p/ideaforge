@@ -32,6 +32,11 @@ const clm = await import("../src/lib/verify/claims.ts");
 const entail = await import("../src/lib/verify/entail.ts");
 const csv = await import("../src/lib/cohorts/parse.ts");
 const coh = await import("../src/lib/db/cohorts.ts");
+const usg = await import("../src/lib/ai/usage.ts");
+const tokens = await import("../src/lib/db/tokens.ts");
+const ai = await import("../src/lib/ai/index.ts");
+const fc = await import("../src/lib/pipeline/forecast.ts");
+const pipe = await import("../src/lib/pipeline/index.ts");
 const clmdb = await import("../src/lib/db/claims.ts");
 const shg = await import("../src/lib/verify/shingle.ts");
 const evd = await import("../src/lib/verify/evidence.ts");
@@ -1145,6 +1150,187 @@ console.log("\n\x1b[1mcontent fingerprints and drift\x1b[0m");
   await p.deleteProject(proj.id, owner.id);
   eq("deleting a project purges its fingerprints", (await snap.getSnapshots(proj.id)).length, 0);
   await u.deleteUser(owner.id);
+}
+
+console.log("\n\x1b[1mprompt studio\x1b[0m");
+{
+  const f = fc.forecastPrompt("Tell me whether hostel food waste is a real problem.", ["a", "b", "c"]);
+  ok("a prompt's own cost is counted from its text", f.promptTokens > 0);
+  ok("the expected answer is a range, not a point", f.outputLow < f.outputHigh);
+  eq("the headline is prompt plus the middle of that range",
+     f.totalMid, f.promptTokens + Math.round((f.outputLow + f.outputHigh) / 2));
+
+  // More sections asked for means a longer answer expected — that is the
+  // property the forecast rests on.
+  const few = fc.forecastPrompt("Same prompt text here for both.", ["one"]);
+  const many = fc.forecastPrompt("Same prompt text here for both.", ["one", "two", "three", "four"]);
+  ok("asking for more sections forecasts a longer answer", many.totalMid > few.totalMid);
+
+  const summed = fc.sumForecasts([
+    { forecast: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 } },
+    { forecast: { promptTokens: 20, outputLow: 200, outputHigh: 400, totalMid: 320 } },
+  ]);
+  eq("a batch total adds the prompts", summed.promptTokens, 30);
+  eq("and the midpoints", summed.totalMid, 480);
+
+  // Recommendations are computed from the text, so they are checkable.
+  const vague = fc.recommend({
+    idea: "an app for stuff",
+    prompts: [{ angle: "A", expectSections: ["x", "y", "z"], forecast: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 } }],
+    total: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 },
+  });
+  const kinds = (rs) => rs.map((r) => r.kind);
+  ok("a vague idea is told it is short", vague.some((r) => r.title.includes("very short")));
+  ok("and that nobody is named", vague.some((r) => r.title.includes("No one is named")));
+  ok("and that no outcome is measurable", vague.some((r) => r.title.includes("No outcome")));
+  ok("the cost is always reported", kinds(vague).includes("cost"));
+  ok("and something is always recommended first", kinds(vague).includes("pick"));
+
+  const sharp = fc.recommend({
+    idea: "Predict how many students eat dinner in a hostel mess to reduce food waste",
+    prompts: [{ angle: "A", expectSections: ["x", "y", "z"], forecast: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 } }],
+    total: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 },
+  });
+  eq("a sharp idea is not told to sharpen it",
+     sharp.filter((r) => r.kind === "sharpen").length, 0);
+
+  const big = fc.recommend({
+    idea: "Predict hostel dinner headcount to reduce student food waste",
+    prompts: [{ angle: "A", expectSections: ["x"], forecast: { promptTokens: 100, outputLow: 1, outputHigh: 2, totalMid: 20000 } }],
+    total: { promptTokens: 100, outputLow: 9000, outputHigh: 15000, totalMid: 20000 },
+  });
+  ok("a large batch is flagged", big.some((r) => r.kind === "warn"));
+
+  // End to end through the pipeline. Demo mode is enough — the prompts are
+  // templated but the counting and the advice are the real code — and it is the
+  // only deterministic option, so a live provider skips rather than spending
+  // money to assert something the mock already proves.
+  if (!ai.getProvider().isMock) {
+    console.log("  \x1b[33m⚠ a live provider is configured — skipping the end-to-end draft\x1b[0m");
+  } else {
+  const set = await pipe.getPipeline().draftPrompts({ idea: "A tool that helps hostel kitchens predict dinner headcount" });
+  ok("at least three prompts are drafted", set.prompts.length >= 3);
+  ok("each carries its own forecast", set.prompts.every((x) => x.forecast.totalMid > 0));
+  ok("the angles are distinct", new Set(set.prompts.map((x) => x.angle)).size === set.prompts.length);
+  ok("every prompt is self-contained enough to paste", set.prompts.every((x) => x.prompt.length > 80));
+  ok("each says what a good answer contains", set.prompts.every((x) => x.expectSections.length > 0));
+  eq("the batch total is the sum of the parts",
+     set.totalForecast.totalMid,
+     set.prompts.reduce((n, x) => n + x.forecast.totalMid, 0));
+  ok("the idea is restated back", set.restated.length > 0);
+  ok("recommendations follow the prompts", set.recommendations.length > 0);
+  }
+}
+
+console.log("\n\x1b[1mtoken accounting\x1b[0m");
+{
+  eq("an empty total is zero", usg.totalTokens(usg.EMPTY_USAGE), 0);
+  eq("recording outside a scope is a no-op, not a crash",
+     (usg.record({ inputTokens: 5, outputTokens: 5, estimated: false, provider: "x", model: "y" }), usg.current()),
+     null);
+
+  const { result, usage } = await usg.withUsage(async () => {
+    usg.record({ inputTokens: 100, outputTokens: 40, estimated: false, provider: "anthropic", model: "m" });
+    usg.record({ inputTokens: 20, outputTokens: 10, estimated: false, provider: "anthropic", model: "m" });
+    return "done";
+  });
+  eq("the callback's value comes back", result, "done");
+  eq("input tokens add up", usage.inputTokens, 120);
+  eq("output tokens add up", usage.outputTokens, 50);
+  eq("each call is counted", usage.calls, 2);
+  eq("and the total is the sum", usg.totalTokens(usage), 170);
+  eq("a measured total is not marked estimated", usage.estimated, false);
+
+  // Deeply nested work must still land in the surrounding scope — that is the
+  // whole reason the counter travels in the async context.
+  const nested = await usg.withUsage(async () => {
+    const inner = async () => {
+      await new Promise((r) => setTimeout(r, 1));
+      usg.record({ inputTokens: 7, outputTokens: 3, estimated: true, provider: "mock", model: "offline" });
+    };
+    await Promise.all([inner(), inner()]);
+  });
+  eq("nested async calls are counted", nested.usage.calls, 2);
+  eq("and one estimate taints the total", nested.usage.estimated, true);
+
+  // Streaming: usage reported mid-stream still lands in the right scope.
+  const counted = usg.streamWithUsage(async function* () {
+    yield "a";
+    usg.record({ inputTokens: 11, outputTokens: 4, estimated: false, provider: "p", model: "m" });
+    yield "b";
+  });
+  let streamed = "";
+  for await (const chunk of counted.stream) streamed += chunk;
+  eq("the stream still yields its chunks", streamed, "ab");
+  eq("usage reported mid-stream is captured", counted.usage().inputTokens, 11);
+
+  // The trailer that carries a total to the browser.
+  const wire = "Some prose." + usg.encodeUsage({ ...usg.EMPTY_USAGE, inputTokens: 9, outputTokens: 2, calls: 1 });
+  const decoded = usg.decodeUsage(wire);
+  eq("the prose survives the round trip", decoded.text, "Some prose.");
+  eq("and so does the total", decoded.usage.inputTokens, 9);
+  eq("a body with no trailer decodes to itself", usg.decodeUsage("plain").text, "plain");
+  eq("and reports no usage", usg.decodeUsage("plain").usage, null);
+  eq("a truncated trailer costs the number, not the answer",
+     usg.decodeUsage("prose" + usg.USAGE_MARKER + "{bad").text, "prose");
+
+  // The offline provider has no real count, and must say so.
+  const mock = ai.getProvider();
+  if (mock.isMock) {
+    const demo = await usg.withUsage(async () => {
+      let out = "";
+      for await (const c of mock.streamText({ messages: [{ role: "user", content: "an idea about food waste" }] })) out += c;
+      return out;
+    });
+    ok("demo mode still reports a figure", usg.totalTokens(demo.usage) > 0);
+    eq("and flags it as an estimate", demo.usage.estimated, true);
+  } else {
+    console.log("  \x1b[33m⚠ a live provider is configured — skipping the demo-mode check\x1b[0m");
+  }
+
+  // Storage.
+  const owner = await u.createUser(`tok-${Date.now()}@example.test`, "salt:hash", "Token Owner");
+  const proj = await p.createProject({ userId: owner.id, title: "T", idea: "Counting tokens" });
+
+  await tokens.recordUsage({ userId: owner.id, projectId: proj.id, operation: "validate",
+    usage: { ...usg.EMPTY_USAGE, inputTokens: 100, outputTokens: 50, calls: 1 } });
+  await tokens.recordUsage({ userId: owner.id, projectId: proj.id, operation: "research",
+    usage: { ...usg.EMPTY_USAGE, inputTokens: 800, outputTokens: 300, calls: 4 } });
+  await tokens.recordUsage({ userId: owner.id, projectId: proj.id, operation: "research",
+    usage: { ...usg.EMPTY_USAGE, inputTokens: 200, outputTokens: 100, calls: 2 } });
+
+  // A run that reported nothing is a failed run, not a free one.
+  await tokens.recordUsage({ userId: owner.id, projectId: proj.id, operation: "plan", usage: usg.EMPTY_USAGE });
+
+  const pu = await tokens.projectUsage(proj.id);
+  eq("the project total sums every run", pu.total.totalTokens, 1550);
+  eq("runs are counted", pu.total.runs, 3);
+  eq("and so are the model calls beneath them", pu.total.calls, 7);
+  eq("a run that reported nothing is not stored", pu.byOperation.some((o) => o.operation === "plan"), false);
+  eq("the breakdown is ordered by cost", pu.byOperation[0].operation, "research");
+  eq("and groups repeated runs of one operation", pu.byOperation[0].total.runs, 2);
+
+  const uu = await tokens.userUsage(owner.id);
+  eq("the user total matches the project total", uu.total.totalTokens, 1550);
+  eq("a future window excludes everything", (await tokens.userUsage(owner.id, Date.now() + 1000)).total.runs, 0);
+
+  const last = await tokens.latestRun(owner.id);
+  ok("the most recent run is retrievable", last !== null);
+
+  // Runs happen before a project exists and are claimed when it is saved.
+  await tokens.recordUsage({ userId: owner.id, operation: "validate",
+    usage: { ...usg.EMPTY_USAGE, inputTokens: 10, outputTokens: 5, calls: 1 } });
+  const proj2 = await p.createProject({ userId: owner.id, title: "T2", idea: "Another idea" });
+  eq("an unattached run is claimed by a new project",
+     await tokens.attachRecentUsage(owner.id, proj2.id), 1);
+  eq("and then belongs to it", (await tokens.projectUsage(proj2.id)).total.totalTokens, 15);
+  eq("claiming again finds nothing left", await tokens.attachRecentUsage(owner.id, proj2.id), 0);
+
+  await p.deleteProject(proj.id, owner.id);
+  eq("deleting a project purges its usage", (await tokens.projectUsage(proj.id)).total.runs, 0);
+  await p.deleteProject(proj2.id, owner.id);
+  await u.deleteUser(owner.id);
+  eq("deleting a user purges theirs", (await tokens.userUsage(owner.id)).total.runs, 0);
 }
 
 console.log("\n\x1b[1mcohort import (delimited parsing)\x1b[0m");

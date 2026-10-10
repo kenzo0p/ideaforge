@@ -275,6 +275,12 @@ async function ensureIndexes(db: Db): Promise<void> {
     db.collection("ideaVectors").createIndex({ projectId: 1 }),
     db.collection("groundingReports").createIndex({ userId: 1 }),
 
+    // Token accounting. The project read is the common one; the per-user read
+    // backs the settings page and always filters on a date.
+    db.collection("tokenUsage").createIndex({ projectId: 1, createdAt: -1 }),
+    db.collection("tokenUsage").createIndex({ userId: 1, createdAt: -1 }),
+    db.collection("tokenUsage").createIndex({ expiresAt: 1 }, ttl),
+
     // The public directory and the sitemap read exactly this.
     db.collection("projects").createIndex(
       { listed: 1, listedAt: -1 },

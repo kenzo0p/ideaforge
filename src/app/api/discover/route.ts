@@ -4,6 +4,8 @@ import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider } from "@/lib/search";
 import { getPipeline } from "@/lib/pipeline";
+import { withUsage, totalTokens } from "@/lib/ai/usage";
+import { recordUsage } from "@/lib/db/tokens";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 
 export const runtime = "nodejs";
@@ -31,12 +33,18 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await getPipeline().discoverProblems(
+    const { result: result, usage } = await withUsage(() => getPipeline().discoverProblems(
       { domain: body.domain, locale: body.locale },
       req.signal,
-    );
+    ));
+    void recordUsage({ userId: auth.id, operation: "discover", usage });
     return Response.json(result, {
       headers: {
+        "X-Tokens-In": String(usage.inputTokens),
+        "X-Tokens-Out": String(usage.outputTokens),
+        "X-Tokens-Total": String(totalTokens(usage)),
+        "X-Tokens-Estimated": String(usage.estimated),
+        "X-Model": usage.model,
         "Cache-Control": "no-store",
         "X-Provider": getProvider().label,
         "X-Search-Provider": getSearchProvider().label,

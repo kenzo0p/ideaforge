@@ -198,6 +198,7 @@ export async function deleteUser(userId: string): Promise<void> {
     "watches",
     "watchFindings",
     "analyticsEvents",
+    "tokenUsage",
     // A membership left behind would keep the person on the workspace roster —
     // a ghost seat consumed, and a name a mentor can still click through to.
     "orgMembers",

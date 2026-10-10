@@ -3,6 +3,8 @@ import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getPipeline } from "@/lib/pipeline";
+import { withUsage, totalTokens } from "@/lib/ai/usage";
+import { recordUsage } from "@/lib/db/tokens";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 import { canUseFeature } from "@/lib/billing/entitlements";
 
@@ -51,9 +53,18 @@ export async function POST(req: Request) {
   }
 
   try {
-    const comparison = await getPipeline().compareIdeas({ ideas, locale: body.locale }, req.signal);
+    const { result: comparison, usage } = await withUsage(() => getPipeline().compareIdeas({ ideas, locale: body.locale }, req.signal));
+    void recordUsage({ userId: auth.id, operation: "compare", usage });
     return Response.json(comparison, {
-      headers: { "Cache-Control": "no-store", "X-Provider": getProvider().label },
+      headers: {
+        "Cache-Control": "no-store",
+        "X-Provider": getProvider().label,
+        "X-Tokens-In": String(usage.inputTokens),
+        "X-Tokens-Out": String(usage.outputTokens),
+        "X-Tokens-Total": String(totalTokens(usage)),
+        "X-Tokens-Estimated": String(usage.estimated),
+        "X-Model": usage.model,
+      },
     });
   } catch (err) {
     // The upstream message is for the log, never for the browser: it carries

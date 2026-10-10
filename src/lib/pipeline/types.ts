@@ -261,3 +261,60 @@ export interface ProjectPlan {
   clusters: KnowledgeCluster[];
   demo: boolean;
 }
+
+
+// --- Prompt studio ---------------------------------------------------------
+//
+// One vague line in, several sharp prompts out. The point is not to answer the
+// question yet but to show what asking it well would look like — and what each
+// version would cost before anyone spends it.
+
+/** One angle on the user's idea, written as a prompt they could actually run. */
+export interface StructuredPrompt {
+  /** Stable within a set, so a UI can key and a user can refer to "prompt 2". */
+  id: string;
+  /** The angle this takes — "Market reality", "Technical feasibility", … */
+  angle: string;
+  /** One line on why this angle is worth asking about *this* idea. */
+  rationale: string;
+  /** The prompt itself, ready to copy or run. */
+  prompt: string;
+  /** What a good answer would contain, so the user can judge one. */
+  expectSections: string[];
+  /**
+   * Forecast cost, in tokens.
+   *
+   * A prediction, not a measurement, and named `forecast` so nothing downstream
+   * can confuse it with the counts in `lib/ai/usage` that came from a provider.
+   */
+  forecast: PromptForecast;
+}
+
+export interface PromptForecast {
+  /** Tokens the prompt itself will send. Derived from its text. */
+  promptTokens: number;
+  /** Expected answer size, as a range rather than a false point estimate. */
+  outputLow: number;
+  outputHigh: number;
+  /** Midpoint total, for sorting and for a single headline number. */
+  totalMid: number;
+}
+
+export type RecommendationKind = "pick" | "sharpen" | "cost" | "warn";
+
+export interface PromptRecommendation {
+  kind: RecommendationKind;
+  title: string;
+  detail: string;
+}
+
+export interface PromptSet {
+  /** The idea as the studio understood it — a check on whether it read you right. */
+  restated: string;
+  prompts: StructuredPrompt[];
+  /** What to do next, computed from the set rather than asked of the model. */
+  recommendations: PromptRecommendation[];
+  /** Forecast for running every prompt in the set. */
+  totalForecast: PromptForecast;
+  demo: boolean;
+}

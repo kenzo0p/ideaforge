@@ -4,6 +4,8 @@ import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider } from "@/lib/search";
 import { getPipeline } from "@/lib/pipeline";
+import { withUsage, totalTokens } from "@/lib/ai/usage";
+import { recordUsage } from "@/lib/db/tokens";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 import type { ResearchReport } from "@/lib/pipeline/types";
 
@@ -34,13 +36,19 @@ export async function POST(req: Request) {
   }
 
   try {
-    const plan = await getPipeline().projectHub(
+    const { result: plan, usage } = await withUsage(() => getPipeline().projectHub(
       { idea, locale: body.locale },
       body.research ?? null,
       req.signal,
-    );
+    ));
+    void recordUsage({ userId: auth.id, operation: "plan", usage });
     return Response.json(plan, {
       headers: {
+        "X-Tokens-In": String(usage.inputTokens),
+        "X-Tokens-Out": String(usage.outputTokens),
+        "X-Tokens-Total": String(totalTokens(usage)),
+        "X-Tokens-Estimated": String(usage.estimated),
+        "X-Model": usage.model,
         "Cache-Control": "no-store",
         "X-Provider": getProvider().label,
         "X-Search-Provider": getSearchProvider().label,

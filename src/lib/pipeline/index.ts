@@ -2,10 +2,12 @@ import { getProvider } from "@/lib/ai";
 import { getSearchProvider, type SearchResult } from "@/lib/search";
 import { discoverResources } from "@/lib/resources";
 import { relevantToIdea } from "./relevance";
+import { forecastPrompt, recommend, sumForecasts } from "./forecast";
 import { findVideos } from "@/lib/resources/youtube";
 import {
   deepResearchMessages,
   compareIdeasMessages,
+  promptDraftMessages,
   compareQueries,
   deepResearchQueries,
   documentReviewMessages,
@@ -32,6 +34,8 @@ import type {
   Milestone,
   ProblemDiscovery,
   ProjectPlan,
+  PromptSet,
+  StructuredPrompt,
   ResearchResources,
   VideoResource,
   RankedIdea,
@@ -73,6 +77,18 @@ export interface ScrutanPipeline {
     input: { fileName: string; kind: "pptx" | "pdf"; sectionCount: number; text: string; truncated: boolean; locale?: string },
     signal?: AbortSignal,
   ): Promise<DocumentReview>;
+
+  /**
+   * Turn one rough line into several runnable prompts, with what each will cost.
+   *
+   * Produces prompts rather than answers: the output is what to ask, not what
+   * the answer is, so a user can see the shape of the question before paying
+   * for it.
+   */
+  draftPrompts(
+    input: IdeaInput & { count?: number },
+    signal?: AbortSignal,
+  ): Promise<PromptSet>;
 
   /** Project HUB + Knowledge Clustering: full build plan (Part 3). */
   projectHub(
@@ -252,6 +268,64 @@ class DefaultPipeline implements ScrutanPipeline {
       missing: asArray<string>(parsed.missing),
       sectionNotes: asArray<SectionNote>(parsed.sectionNotes),
       truncated: input.truncated,
+      demo: provider.isMock,
+    };
+  }
+
+  async draftPrompts(
+    input: IdeaInput & { count?: number },
+    signal?: AbortSignal,
+  ): Promise<PromptSet> {
+    const provider = getProvider();
+    // Three angles is the floor: fewer and they collapse into rewordings of one
+    // question, which is the thing this feature exists to get past.
+    const count = Math.max(3, Math.min(6, input.count ?? 3));
+
+    const raw = await provider.generateText({
+      messages: promptDraftMessages(input.idea, count, input.locale),
+      temperature: 0.5,
+      maxTokens: 3000,
+      json: true,
+      signal,
+    });
+    const parsed = safeParse(raw);
+
+    const drafted = asArray<{
+      angle?: string;
+      rationale?: string;
+      prompt?: string;
+      expectSections?: string[];
+    }>(parsed.prompts);
+
+    const prompts: StructuredPrompt[] = drafted
+      .filter((d) => typeof d.prompt === "string" && d.prompt.trim().length > 40)
+      .slice(0, count)
+      .map((d, i) => {
+        const text = d.prompt!.trim();
+        const sections = asArray<string>(d.expectSections)
+          .map((x) => String(x).trim())
+          .filter(Boolean);
+        return {
+          id: `p${i + 1}`,
+          angle: d.angle?.trim() || `Angle ${i + 1}`,
+          rationale: d.rationale?.trim() || "",
+          prompt: text,
+          expectSections: sections,
+          // Counted here, not asked of the model. A model given "how many
+          // tokens is this?" answers confidently and is wrong, and a wrong
+          // number wearing a measurement's clothes is the exact failure this
+          // product refuses everywhere else.
+          forecast: forecastPrompt(text, sections),
+        };
+      });
+
+    const totalForecast = sumForecasts(prompts);
+
+    return {
+      restated: typeof parsed.restated === "string" ? parsed.restated.trim() : input.idea,
+      prompts,
+      recommendations: recommend({ idea: input.idea, prompts, total: totalForecast }),
+      totalForecast,
       demo: provider.isMock,
     };
   }

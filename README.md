@@ -35,6 +35,7 @@ does, and it was previously visible only to people who had already signed up.
 
 | Area | Scope |
 |------|-------|
+| **Sharpen the question** | One rough line becomes 3+ runnable prompts from different angles, each with a forecast of what it would cost to run |
 | **Validate** | Streamed problem validation with a severity score, refined problem statement and v1 scope |
 | **Research** | DeepSearch over live web results, numbered citations, solution comparison, innovation gaps |
 | **Verify** | Every cited URL fetched and classified `verified` / `mismatch` / `dead` / `unreachable` |
@@ -49,6 +50,7 @@ does, and it was previously visible only to people who had already signed up.
 | **Share** | Public/unlisted briefs, `.pptx` / `.docx` / `.md` / PDF export, Notion and Google Docs push |
 | **Audit a cohort** | Every idea in a workspace compared against every other; lookalikes grouped for a guide to read side by side |
 | **Import a batch** | Paste sixty proposals from a spreadsheet — no student accounts needed — and get a printable distinctiveness report |
+| **Count the cost** | Real token usage per run and per project, from the provider's own numbers — with demo-mode figures labelled as estimates |
 | **Around it** | Orgs with domain join, plans and entitlements, Telegram agent, reminders, 8 languages |
 
 ## 🎯 Overview
@@ -211,6 +213,25 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   time re-checking each** — `redirect: "follow"` is the whole vulnerability, since a URL that
   passes inspection can hand the connection to one that would not. The residual DNS-rebinding
   window is documented in the file rather than papered over.
+- **`lib/pipeline/forecast`** — the prompt studio's arithmetic. Most disappointing AI
+  answers are answers to a vague question, and the cost of discovering that is a whole run.
+  So one line becomes several self-contained prompts from genuinely different angles, each
+  shown with what it would cost *before* it is spent. The split is deliberate: the model
+  drafts the prompts, and the code does the counting and every recommendation that follows
+  from counting. A model asked "how many tokens is this?" answers confidently and is wrong,
+  and the advice — start with the cheapest that still asks for structure, you have named
+  nobody, nothing here is measurable — is checkable by reading the line you typed. The
+  figure is a `forecast`, named that everywhere so nothing can confuse it with the measured
+  counts in `lib/ai/usage`, and it is a range because answer length is not a point estimate.
+- **`lib/ai/usage`** — what a run cost, counted. Providers report input and output
+  tokens and the app used to throw that away; now each model call records into a scope the
+  route opened, so a DeepSearch that fans out across several helper functions still totals
+  correctly without any of them taking a counter as an argument. The count travels in the
+  async context (`AsyncLocalStorage`) rather than through every signature. For a streamed
+  answer the headers are long gone by the time the total is known, so it rides at the end of
+  the body behind a U+001F separator the client cuts on. Demo-mode runs have no real tokens
+  and their figure is derived from text length — flagged `estimated` everywhere it is shown,
+  because an estimate and a measurement should not look alike.
 - **`lib/plan`** — the same move as citation verification, applied to the roadmap. A model
   asked for a timeline produces something that *reads* like a schedule; nothing checks that
   milestone four can start when it says it does. Given the durations and dependencies the

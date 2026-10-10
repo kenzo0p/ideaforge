@@ -6,6 +6,7 @@ import { indexProject, removeFromIndex } from "./similar";
 import { purgeGrounding } from "./grounding";
 import { purgeClaims } from "./claims";
 import { purgeSnapshots } from "./snapshots";
+import { purgeProjectUsage } from "./tokens";
 import type { ProjectPlan, ResearchReport } from "@/lib/pipeline/types";
 
 // ---------------------------------------------------------------------------
@@ -398,6 +399,7 @@ export async function deleteProject(id: string, userId: string): Promise<void> {
     purgeGrounding(id),
     purgeClaims(id),
     purgeSnapshots(id),
+    purgeProjectUsage(id),
   ]);
 }
 

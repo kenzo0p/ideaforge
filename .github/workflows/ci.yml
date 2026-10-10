@@ -50,6 +50,9 @@ jobs:
       # depend on; the lexical one exercises the same code paths without it.
       EMBEDDING_PROVIDER: lexical
       ENTAILMENT_PROVIDER: none
+      # No API keys in CI, and the offline provider is the deterministic one —
+      # it is what makes the end-to-end prompt-studio assertions runnable.
+      AI_PROVIDER: mock
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

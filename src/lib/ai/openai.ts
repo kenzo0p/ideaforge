@@ -1,3 +1,4 @@
+import { record } from "./usage";
 import type { AIProvider, GenerateOptions } from "./types";
 
 // Minimal OpenAI Chat Completions client (SSE streaming) — no SDK dependency so
@@ -32,6 +33,10 @@ export class OpenAIProvider implements AIProvider {
       body: JSON.stringify({
         model: this.model,
         stream: true,
+        // Without this the final chunk carries no usage at all, and the count
+        // would silently fall back to an estimate for a provider that can
+        // report the real thing.
+        stream_options: { include_usage: true },
         temperature: options.temperature ?? 0.4,
         max_tokens: options.maxTokens,
         messages: options.messages,
@@ -44,10 +49,25 @@ export class OpenAIProvider implements AIProvider {
       throw new Error(`OpenAI request failed (${res.status}): ${detail}`);
     }
 
+    let inputTokens = 0;
+    let outputTokens = 0;
+
     yield* parseSSE(res.body, (json) => {
-      const chunk = json as { choices?: Array<{ delta?: { content?: string } }> };
+      const chunk = json as {
+        choices?: Array<{ delta?: { content?: string } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      };
+      // The usage chunk arrives last and carries an empty choices array.
+      if (chunk.usage) {
+        inputTokens = chunk.usage.prompt_tokens ?? 0;
+        outputTokens = chunk.usage.completion_tokens ?? 0;
+      }
       return chunk.choices?.[0]?.delta?.content ?? "";
     });
+
+    if (inputTokens || outputTokens) {
+      record({ inputTokens, outputTokens, estimated: false, provider: this.id, model: this.model });
+    }
   }
 
   async generateText(options: GenerateOptions): Promise<string> {

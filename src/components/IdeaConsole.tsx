@@ -29,6 +29,9 @@ import { USAGE_EVENT } from "@/components/UsageMeter";
 import { saveProjectAction } from "@/lib/actions";
 import UpgradePrompt, { parseLimitError } from "@/components/UpgradePrompt";
 import SimilarIdeas from "@/components/SimilarIdeas";
+import TokenBadge, { usageFromHeaders } from "@/components/TokenBadge";
+import { USAGE_MARKER } from "@/lib/ai/usage-shared";
+import type { TokenUsage } from "@/lib/ai/usage-shared";
 import type { ProjectPlan, ResearchReport } from "@/lib/pipeline/types";
 
 // Multilingual: BCP-47 locales the copilot can respond in.
@@ -63,6 +66,9 @@ export default function IdeaConsole({
   const [output, setOutput] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [provider, setProvider] = useState<string | null>(null);
+  const [validationUsage, setValidationUsage] = useState<TokenUsage | null>(null);
+  const [researchUsage, setResearchUsage] = useState<TokenUsage | null>(null);
+  const [planUsage, setPlanUsage] = useState<TokenUsage | null>(null);
   const [locale, setLocale] = useState(defaultLocale);
   const [mode, setMode] = useState<ConsoleMode>(initialMode);
   const [tab, setTab] = useState<ResultTab>("validation");
@@ -151,10 +157,31 @@ export default function IdeaConsole({
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      // The token count is appended after the prose, behind a separator, so it
+      // is held back from the rendered text and split off when it arrives.
+      let tail = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        setOutput((prev) => prev + decoder.decode(value, { stream: true }));
+        const chunk = decoder.decode(value, { stream: true });
+        const at = chunk.indexOf(USAGE_MARKER);
+        if (at === -1 && !tail) {
+          setOutput((prev) => prev + chunk);
+          continue;
+        }
+        if (at === -1) {
+          tail += chunk;
+        } else {
+          setOutput((prev) => prev + chunk.slice(0, at));
+          tail += chunk.slice(at + 1);
+        }
+      }
+      if (tail) {
+        try {
+          setValidationUsage(JSON.parse(tail) as TokenUsage);
+        } catch {
+          // A truncated trailer costs a number, not the answer.
+        }
       }
       setStatus("done");
     } catch (err) {
@@ -185,6 +212,7 @@ export default function IdeaConsole({
         body: JSON.stringify({ idea: analyzedIdea, locale }),
       });
       setSearchProvider(res.headers.get("X-Search-Provider"));
+      setResearchUsage(usageFromHeaders(res.headers));
       window.dispatchEvent(new Event(USAGE_EVENT));
       if (res.status === 401) {
         router.push("/sign-in");
@@ -223,6 +251,7 @@ export default function IdeaConsole({
         body: JSON.stringify({ idea: analyzedIdea, research: report ?? undefined, locale }),
       });
       setPlanProvider(res.headers.get("X-Provider"));
+      setPlanUsage(usageFromHeaders(res.headers));
       window.dispatchEvent(new Event(USAGE_EVENT));
       if (res.status === 401) {
         router.push("/sign-in");
@@ -493,6 +522,11 @@ export default function IdeaConsole({
               <div className={`prose-brief max-w-[72ch] text-[15px] ${streaming ? "caret" : ""}`}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
               </div>
+              {status === "done" && validationUsage && (
+                <div className="mt-3">
+                  <TokenBadge usage={validationUsage} />
+                </div>
+              )}
               {status === "done" && research === "idle" && (
                 <div className="mt-5 flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-muted">
@@ -527,7 +561,14 @@ export default function IdeaConsole({
               )}
               {research === "error" && <ErrorStep message={researchError} onRetry={runResearch} />}
               {research === "done" && report && (
-                <ResearchPanel report={report} searchProvider={searchProvider} />
+                <>
+                  <ResearchPanel report={report} searchProvider={searchProvider} />
+                  {researchUsage && (
+                    <div className="mt-3">
+                      <TokenBadge usage={researchUsage} />
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -549,7 +590,14 @@ export default function IdeaConsole({
               )}
               {planStatus === "error" && <ErrorStep message={planError} onRetry={generatePlan} />}
               {planStatus === "done" && plan && (
-                <ProjectPlanPanel plan={plan} provider={planProvider} />
+                <>
+                  <ProjectPlanPanel plan={plan} provider={planProvider} />
+                  {planUsage && (
+                    <div className="mt-3">
+                      <TokenBadge usage={planUsage} />
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
