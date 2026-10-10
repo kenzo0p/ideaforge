@@ -4,6 +4,8 @@ import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getSearchProvider } from "@/lib/search";
 import { getPipeline } from "@/lib/pipeline";
+import { withUsage, totalTokens } from "@/lib/ai/usage";
+import { recordUsage } from "@/lib/db/tokens";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 
 export const runtime = "nodejs";
@@ -33,9 +35,15 @@ export async function POST(req: Request) {
   }
 
   try {
-    const report = await getPipeline().deepSearch({ idea, locale: body.locale }, req.signal);
+    const { result: report, usage } = await withUsage(() => getPipeline().deepSearch({ idea, locale: body.locale }, req.signal));
+    void recordUsage({ userId: auth.id, operation: "research", usage });
     return Response.json(report, {
       headers: {
+        "X-Tokens-In": String(usage.inputTokens),
+        "X-Tokens-Out": String(usage.outputTokens),
+        "X-Tokens-Total": String(totalTokens(usage)),
+        "X-Tokens-Estimated": String(usage.estimated),
+        "X-Model": usage.model,
         "Cache-Control": "no-store",
         "X-Provider": getProvider().label,
         "X-Search-Provider": getSearchProvider().label,

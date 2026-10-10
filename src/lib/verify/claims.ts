@@ -1,4 +1,5 @@
 import { getEmbedder } from "@/lib/similarity";
+import { CONTRADICTION_AT, getEntailer, type Entailer } from "./entail";
 import { cosine } from "@/lib/similarity/types";
 import { chunkWords, normaliseText } from "./chunk";
 import { fetchPageText, mapLimit } from "./page";
@@ -78,6 +79,8 @@ export interface ClaimReport {
   uncited: number;
   /** Which embedder scored this; a degraded model must be visible downstream. */
   model: string;
+  /** Which entailer judged contradictions, or "none" when none was available. */
+  entailer: string;
   checkedAt: number;
 }
 
@@ -208,8 +211,10 @@ export interface Figure {
 function extractFigures(text: string): Figure[] {
   const out = new Set<string>();
   const patterns = [
-    // 31.2%, 22 %
-    /\d[\d,]*(?:\.\d+)?\s*%/g,
+    // 31.2%, 22 %, and the spelled unit — "over 95 percent" was slipping
+    // through a pattern that only knew the symbol, which is how a fabricated
+    // accuracy figure went unflagged in the calibration set.
+    /\d[\d,]*(?:\.\d+)?\s*(?:%|per\s?cents?|percent)/gi,
     // ₹40.5 crore, $2.3 billion, Rs 1,200
     new RegExp(`(?:[₹$€£]|\\b(?:rs|inr|usd|eur)\\b\\.?)\\s*\\d[\\d,]*(?:\\.\\d+)?(?:\\s*(?:${SCALE}))?`, "gi"),
     // 40 crore, 2.3 million
@@ -349,8 +354,18 @@ interface SourceText {
 export async function verifyClaims(input: {
   markdown: string;
   citations: Citation[];
+  /**
+   * Page text already in hand, keyed by citation id.
+   *
+   * Lets a caller that has just fetched these pages for another reason hand
+   * them over instead of having them fetched again. Opening every cited source
+   * twice to answer two halves of one question would double what we ask of
+   * other people's servers for no gain.
+   */
+  pages?: Map<number, string>;
 }): Promise<ClaimReport> {
   const embedder = getEmbedder();
+  const entailer = getEntailer();
   const thresholds = thresholdsFor(embedder.id);
   const empty: ClaimReport = {
     verdicts: [],
@@ -363,6 +378,7 @@ export async function verifyClaims(input: {
     contradicted: 0,
     thresholds,
     model: embedder.id,
+    entailer: entailer.id,
     checkedAt: Date.now(),
   };
 
@@ -386,14 +402,17 @@ export async function verifyClaims(input: {
 
   // Fetch and embed each cited source exactly once, however many claims use it.
   const cited = [...new Set(claims.flatMap((c) => c.citationIds))].filter((id) => byId.has(id));
-  const sources = await loadSources(cited, byId, embedder);
+  const sources = await loadSources(cited, byId, embedder, input.pages);
   const sourceById = new Map(sources.map((s) => [s.id, s]));
 
   const claimVectors = await embedder.embedAll(claims.map((c) => c.clean));
 
-  const verdicts = claims.map((claim, i) =>
-    judge(claim, i, claimVectors[i], sourceById, thresholds),
-  );
+  // Sequential rather than parallel: entailment is CPU-bound inference on one
+  // thread, so concurrency buys nothing here and multiplies peak memory.
+  const verdicts: ClaimVerdict[] = [];
+  for (let i = 0; i < claims.length; i++) {
+    verdicts.push(await judge(claims[i], i, claimVectors[i], sourceById, thresholds, entailer));
+  }
 
   const count = (k: SupportKind) => verdicts.filter((v) => v.kind === k).length;
   const supported = count("supported");
@@ -413,6 +432,7 @@ export async function verifyClaims(input: {
     contradicted: count("contradicted"),
     thresholds,
     model: embedder.id,
+    entailer: entailer.id,
     checkedAt: Date.now(),
   };
 }
@@ -421,8 +441,13 @@ async function loadSources(
   ids: number[],
   byId: Map<number, Citation>,
   embedder: ReturnType<typeof getEmbedder>,
+  prefetched?: Map<number, string>,
 ): Promise<SourceText[]> {
   const fetched = await mapLimit(ids, CONCURRENCY, async (id) => {
+    const ready = prefetched?.get(id);
+    if (ready !== undefined) {
+      return { id, page: { ok: true, status: 200, contentType: "text/html", text: ready, error: null } };
+    }
     const citation = byId.get(id)!;
     const page = await fetchPageText(citation.url);
     return { id, page };
@@ -449,13 +474,14 @@ async function loadSources(
   return out;
 }
 
-function judge(
+async function judge(
   claim: Sentence,
   index: number,
   vector: number[],
   sources: Map<number, SourceText>,
   thresholds: Thresholds,
-): ClaimVerdict {
+  entailer: Entailer,
+): Promise<ClaimVerdict> {
   const base = { index, text: claim.text, citationIds: claim.citationIds };
   const figures = extractFigures(claim.clean);
   const figureDisplays = figures.map((f) => f.display);
@@ -511,7 +537,30 @@ function judge(
   // cases that can be checked literally are checked literally instead.
   // ---------------------------------------------------------------------
 
-  // 1. An explicit denial in the passage that most resembles the claim.
+  // 1a. A model that read both together and judged them incompatible.
+  //
+  // Runs before the phrase list because it catches a strictly different set:
+  // measured on the calibration pairs, entailment found the contradiction that
+  // no phrase in the list appears in, and the list found two the model scored
+  // as neutral. Neither subsumes the other, so both run.
+  if (best.passage && score >= thresholds.weak) {
+    const judgement = await entailer.score(best.passage, claim.clean);
+    if (judgement && judgement.contradiction >= CONTRADICTION_AT) {
+      return {
+        ...base,
+        kind: "contradicted",
+        score,
+        sourceId: best.sourceId,
+        passage: best.passage,
+        unmatchedFigures: unmatched,
+        note:
+          `Source [${best.sourceId}] appears to state the opposite ` +
+          `(${Math.round(judgement.contradiction * 100)}% confidence).`,
+      };
+    }
+  }
+
+  // 1b. An explicit denial in the passage that most resembles the claim.
   const refutation = best.passage ? refutationIn(best.passage, claim.clean) : null;
   if (refutation && score >= thresholds.weak) {
     return {

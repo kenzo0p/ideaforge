@@ -20,6 +20,7 @@ import {
   PanelLeftOpen,
   Search,
   Settings,
+  Wand2,
   CreditCard,
   Sparkles,
   UserPlus,
@@ -51,6 +52,9 @@ const PROJECT_SECTIONS = [
 const NAV = [
   { href: "/", label: "New idea", icon: Sparkles, authOnly: false },
   { href: "/?mode=discover", label: "Find a problem", icon: Lightbulb, authOnly: true },
+  // Sits next to the two ways of starting, because it is a third: sharpen the
+  // question before spending a run on it.
+  { href: "/prompts", label: "Prompt studio", icon: Wand2, authOnly: true },
   // Visible signed-out: this is where search traffic lands and browses.
   { href: "/explore", label: "Explore", icon: Compass, authOnly: false },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, authOnly: true },

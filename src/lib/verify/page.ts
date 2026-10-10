@@ -18,6 +18,8 @@
 export const USER_AGENT =
   "ScrutanCitationCheck/1.0 (+verifies that cited sources resolve; contact via the site)";
 
+import { safeFetch } from "./safe-fetch";
+
 export const TIMEOUT_MS = 8000;
 export const MAX_BODY_BYTES = 400_000;
 
@@ -81,16 +83,18 @@ export async function fetchPageText(url: string): Promise<FetchedPage> {
     error,
   });
 
-  if (!/^https?:\/\/[^\s]+\.[^\s]+/.test(url ?? "")) return miss("Not a valid URL.");
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      redirect: "follow",
-      signal: controller.signal,
+    // Every hop is checked against the public-address rules. This is the only
+    // way any code here reaches the network, so a URL that should not be opened
+    // cannot be opened by forgetting a guard at one call site.
+    const attempt = await safeFetch(url, {
       headers: { "User-Agent": USER_AGENT, Accept: "text/html,*/*" },
+      timeoutMs: TIMEOUT_MS,
     });
+
+    if (!attempt.ok) return miss(attempt.blocked.message);
+
+    const res = attempt.value.response;
     const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok) return { ...miss(`Server returned ${res.status}.`, res.status), contentType };
 
@@ -112,8 +116,6 @@ export async function fetchPageText(url: string): Promise<FetchedPage> {
     const message = err instanceof Error ? err.message : String(err);
     const aborted = /abort/i.test(message);
     return miss(aborted ? `No response within ${TIMEOUT_MS / 1000}s.` : message.slice(0, 120));
-  } finally {
-    clearTimeout(timer);
   }
 }
 

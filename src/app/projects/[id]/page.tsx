@@ -16,8 +16,10 @@ import GroundingCheck from "@/components/GroundingCheck";
 import GroundingBadge from "@/components/GroundingBadge";
 import ClaimCheck from "@/components/ClaimCheck";
 import ConsistencyCheck from "@/components/ConsistencyCheck";
+import ProjectTokens from "@/components/ProjectTokens";
 import { claimsAction, groundingAction } from "@/lib/research-actions";
 import { checkConsistency } from "@/lib/verify/consistency";
+import { projectUsage } from "@/lib/db/tokens";
 import Collaborators from "@/components/Collaborators";
 import CommentThread from "@/components/CommentThread";
 import { collaborationStateAction } from "@/lib/collab-actions";
@@ -65,6 +67,7 @@ export default async function ProjectPage({
   const watchState = await watchStatusAction(id);
   const grounding = await groundingAction(id);
   const claims = await claimsAction(id);
+  const tokens = await projectUsage(id);
   // Pure and instant — no network, no model — so it runs on every load rather
   // than waiting to be asked for.
   const consistency = checkConsistency({
@@ -192,7 +195,19 @@ export default async function ProjectPage({
             <EmptySection label="No plan saved for this project." />
           ))}
 
-        {activeTab === "workspace" && <Workspace projectId={project.id} items={items} />}
+        {activeTab === "workspace" && (
+          <>
+            {/* What this project cost, beside the other per-project facts.
+                Reference rather than a finding, so it sits in the workspace
+                tab rather than above the tabs with the consistency check. */}
+            {tokens.total.runs > 0 && (
+              <div className="mb-5">
+                <ProjectTokens total={tokens.total} byOperation={tokens.byOperation} />
+              </div>
+            )}
+            <Workspace projectId={project.id} items={items} />
+          </>
+        )}
 
         {activeTab === "collaborate" && (
           <>

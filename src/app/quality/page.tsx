@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { AlertTriangle, CheckCircle2, FlaskConical, ShieldQuestion, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, FlaskConical, ShieldQuestion, XCircle } from "lucide-react";
 import report from "@/data/eval-report.json";
 import { publicUrl } from "@/lib/http/origin";
 
@@ -199,6 +199,29 @@ export default function QualityPage() {
           )}
         </>
       )}
+
+      <section className="mt-5 rounded-2xl border border-border bg-card p-5">
+        <h2 className="mb-1 text-sm font-semibold">The labelled set, published</h2>
+        <p className="mb-3 max-w-prose text-xs text-muted">
+          The two thresholds that decide whether a claim is called <em>stated</em>,{" "}
+          <em>related</em> or <em>not in the source</em> are derived from 50 hand-labelled
+          claim/passage pairs. A threshold whose justification cannot be inspected is the
+          same kind of claim as an uncited statistic, so here are the pairs.
+        </p>
+        <a
+          href="/quality/dataset"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border-strong px-3 py-1.5 text-xs font-medium transition hover:bg-hover"
+        >
+          <Download className="size-3.5" />
+          Download the dataset (JSON)
+        </a>
+        <p className="mt-2 max-w-prose text-[11px] text-muted">
+          They were written by the people who chose the thresholds, and written to sit near
+          the decision boundary — so they calibrate the cut-offs and do <strong>not</strong>{" "}
+          measure accuracy on real briefings. That distinction is the whole reason this is
+          published rather than summarised.
+        </p>
+      </section>
 
       <section className="mt-5 rounded-2xl border border-border bg-card p-5">
         <h2 className="mb-3 text-sm font-semibold">How the number is produced</h2>

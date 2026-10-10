@@ -2,6 +2,8 @@ import { classifyFailure } from "@/lib/health/failures";
 import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
+import { encodeUsage, streamWithUsage } from "@/lib/ai/usage";
+import { recordUsage } from "@/lib/db/tokens";
 import { getPipeline } from "@/lib/pipeline";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 
@@ -35,11 +37,23 @@ export async function POST(req: Request) {
   const pipeline = getPipeline();
   const encoder = new TextEncoder();
 
+  // The token count is only known once the model has finished, by which time
+  // the response headers are long gone — so it travels at the end of the body
+  // behind a separator the client cuts on.
+  const counted = streamWithUsage(() =>
+    pipeline.validateProblem({ idea, locale: body.locale }, req.signal),
+  );
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const chunk of pipeline.validateProblem({ idea, locale: body.locale }, req.signal)) {
+        for await (const chunk of counted.stream) {
           controller.enqueue(encoder.encode(chunk));
+        }
+        const usage = counted.usage();
+        if (usage.calls > 0) {
+          controller.enqueue(encoder.encode(encodeUsage(usage)));
+          void recordUsage({ userId: auth.id, operation: "validate", usage });
         }
       } catch (err) {
         // Never the provider's own words. This used to stream the raw upstream

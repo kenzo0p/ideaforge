@@ -13,6 +13,14 @@ sounds; it is what fraction of its evidence survived being checked.
 > architecture → roadmap → tech stack → repos, APIs & datasets → timeline → deck-ready docs
 > → **a grounding score over every source cited.**
 
+### Check somebody else's answer
+
+`/verify` takes the same engine and points it outward. Paste an answer from ChatGPT,
+Perplexity or anywhere else along with its sources: every URL is opened, every sentence is
+matched against the source it cited, and six citations tracing to one press release are
+reported as one source. No account needed — it is the most persuasive thing the product
+does, and it was previously visible only to people who had already signed up.
+
 ### What it refuses to do
 
 - **Invent a link.** The model is handed numbered search results and can only cite by
@@ -27,6 +35,7 @@ sounds; it is what fraction of its evidence survived being checked.
 
 | Area | Scope |
 |------|-------|
+| **Sharpen the question** | One rough line becomes 3+ runnable prompts from different angles, each with a forecast of what it would cost to run |
 | **Validate** | Streamed problem validation with a severity score, refined problem statement and v1 scope |
 | **Research** | DeepSearch over live web results, numbered citations, solution comparison, innovation gaps |
 | **Verify** | Every cited URL fetched and classified `verified` / `mismatch` / `dead` / `unreachable` |
@@ -40,13 +49,15 @@ sounds; it is what fraction of its evidence survived being checked.
 | **Keep** | MongoDB-backed projects, version history, workspaces, comments, collaborators, live updates |
 | **Share** | Public/unlisted briefs, `.pptx` / `.docx` / `.md` / PDF export, Notion and Google Docs push |
 | **Audit a cohort** | Every idea in a workspace compared against every other; lookalikes grouped for a guide to read side by side |
+| **Import a batch** | Paste sixty proposals from a spreadsheet — no student accounts needed — and get a printable distinctiveness report |
+| **Count the cost** | Real token usage per run and per project, from the provider's own numbers — with demo-mode figures labelled as estimates |
 | **Around it** | Orgs with domain join, plans and entitlements, Telegram agent, reminders, 8 languages |
 
 ## 🎯 Overview
 
-**IdeaForge** is an AI-powered research and innovation copilot designed for hackathon participants, students, researchers, and first-time founders. It bridges the gap between having a raw project idea and knowing whether it is worth building—and how to execute it—in under 4 minutes.
+**Scrutan** is an AI-powered research and innovation copilot designed for hackathon participants, students, researchers, and first-time founders. It bridges the gap between having a raw project idea and knowing whether it is worth building—and how to execute it—in under 4 minutes.
 
-Unlike generic conversational AI tools, IdeaForge grounds its analysis in **live web search results (Tavily)** and real external resources (open-source code on **GitHub**, datasets on **Kaggle**, academic preprints on **CORE / arXiv**, and tutorial videos on **YouTube**). It enforces strict citation integrity, rejecting invented URLs and providing deterministic scoring and structured technical build plans.
+Unlike generic conversational AI tools, Scrutan grounds its analysis in **live web search results (Tavily)** and real external resources (open-source code on **GitHub**, datasets on **Kaggle**, academic preprints on **CORE / arXiv**, and tutorial videos on **YouTube**). It enforces strict citation integrity, rejecting invented URLs and providing deterministic scoring and structured technical build plans.
 
 ---
 
@@ -61,7 +72,7 @@ Unlike generic conversational AI tools, IdeaForge grounds its analysis in **live
 
 ## 💡 Solution
 
-IdeaForge provides an automated, end-to-end pipeline that takes a single sentence and executes a multi-phase research & planning workflow:
+Scrutan provides an automated, end-to-end pipeline that takes a single sentence and executes a multi-phase research & planning workflow:
 
 - **Honest Severity Scoring**: Pushes back on weak, unhelpful, or over-saturated ideas with an explicit 1–10 Severity rating before any code is written.
 - **Grounded Web Research with Zero Link Hallucinations**: Runs live web searches via Tavily, handing numbered source snippets to the LLM. The LLM cites claims with `[n]` markers, and the server constructs the citation list directly from real search results.
@@ -91,7 +102,7 @@ IdeaForge provides an automated, end-to-end pipeline that takes a single sentenc
 ## 🏗️ System Architecture
 
 ### Visual Diagram
-![IdeaForge System Architecture](./public/system_architecture.png)
+![Scrutan System Architecture](./public/system_architecture.png)
 
 ### Sequence & Flow (Mermaid)
 
@@ -150,9 +161,16 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   calibration produced the finding the design now turns on: **passages that contradict a
   claim score higher on average (0.554) than passages that genuinely paraphrase it (0.531)**,
   because an embedding encodes subject matter and a denial is about the same subject as the
-  assertion it denies. No threshold can separate them, so the two catchable cases are
-  checked literally instead — figures (including spelled-out ones, in either notation) and
-  explicit refutations scoped to the claim's own subject. The cut-offs are stored **per
+  assertion it denies. No threshold can separate them, so contradiction is decided three
+  other ways, and the ablation in `eval:claims` shows none of them subsumes another:
+  a **local NLI cross-encoder** (`entail.ts`) that reads passage and claim together,
+  literal figure checks (including spelled-out percentages and quantities, matched across
+  notations), and explicit refutation phrases scoped to the claim's own subject. Together
+  they catch 6 of 6 contradictions in the calibration set with no false positives on 22
+  supported pairs; entailment alone catches 4, and is the only one that reaches a passage
+  arguing the opposite in words no phrase list contains. It is used for contradiction
+  **only** — strict NLI calls a claim `neutral` whenever the passage does not restate its
+  full scope, so the embedder stays the better judge of support. The cut-offs are stored **per
   model**, because the two embedders live in different numeric ranges and sharing a constant
   would put every claim below the weak bar on the fallback, telling every user their whole
   briefing was fabricated. An uncalibrated model produces no verdicts at all.
@@ -185,6 +203,35 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   already proposed this?" within a workspace. Two implementations with measured, documented
   behaviour: the neural one separates paraphrases from unrelated ideas, the lexical fallback
   demonstrably cannot, and it says so in the log rather than pretending.
+- **`lib/verify/safe-fetch.ts`** — the guard that makes a public check possible. Every fetch
+  in the product goes through it, because an endpoint that opens URLs a stranger supplied is
+  a proxy running inside our network, and the interesting targets are not on the internet:
+  `169.254.169.254` hands out cloud instance credentials to anything that can make an HTTP
+  request. So the host is resolved, every address it answers with is checked against the
+  non-routable ranges (IPv4, IPv6, and IPv4-mapped IPv6, which is how a private address gets
+  past a checker that only understands one family), and redirects are followed **one hop at a
+  time re-checking each** — `redirect: "follow"` is the whole vulnerability, since a URL that
+  passes inspection can hand the connection to one that would not. The residual DNS-rebinding
+  window is documented in the file rather than papered over.
+- **`lib/pipeline/forecast`** — the prompt studio's arithmetic. Most disappointing AI
+  answers are answers to a vague question, and the cost of discovering that is a whole run.
+  So one line becomes several self-contained prompts from genuinely different angles, each
+  shown with what it would cost *before* it is spent. The split is deliberate: the model
+  drafts the prompts, and the code does the counting and every recommendation that follows
+  from counting. A model asked "how many tokens is this?" answers confidently and is wrong,
+  and the advice — start with the cheapest that still asks for structure, you have named
+  nobody, nothing here is measurable — is checkable by reading the line you typed. The
+  figure is a `forecast`, named that everywhere so nothing can confuse it with the measured
+  counts in `lib/ai/usage`, and it is a range because answer length is not a point estimate.
+- **`lib/ai/usage`** — what a run cost, counted. Providers report input and output
+  tokens and the app used to throw that away; now each model call records into a scope the
+  route opened, so a DeepSearch that fans out across several helper functions still totals
+  correctly without any of them taking a counter as an argument. The count travels in the
+  async context (`AsyncLocalStorage`) rather than through every signature. For a streamed
+  answer the headers are long gone by the time the total is known, so it rides at the end of
+  the body behind a U+001F separator the client cuts on. Demo-mode runs have no real tokens
+  and their figure is derived from text length — flagged `estimated` everywhere it is shown,
+  because an estimate and a measurement should not look alike.
 - **`lib/plan`** — the same move as citation verification, applied to the roadmap. A model
   asked for a timeline produces something that *reads* like a schedule; nothing checks that
   milestone four can start when it says it does. Given the durations and dependencies the
@@ -227,6 +274,20 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
   taking the better of their own subscription and their workspace's; `entitlements.ts` is the
   only place that answers "is this allowed?", so a gate can never be enforced in one route and
   forgotten in its sibling.
+- **`lib/cohorts` + `lib/db/cohorts`** — the supervisor's path. The workspace overlap view
+  compares projects created here; the question a department head has arrives before any of
+  that — sixty proposals in a spreadsheet, due Friday, and no way to know how many are the
+  same project. So a batch is pasted straight in and compared as a corpus of its own, with
+  no student accounts involved. That needs a real delimited-text reader rather than
+  `split(",")`: project ideas are sentences and sentences have commas, titles have quotes,
+  and an exported cell can contain a newline — so RFC 4180 quoting, doubled-quote escapes,
+  both line endings, byte-order marks, and tab detection because that is what copying out of
+  a spreadsheet actually puts on the clipboard. Columns are matched by name on **word
+  boundaries**, after substring matching read a column of descriptions as the student
+  identifier (`id` is inside `Idea`). Unusable rows are reported by line number rather than
+  dropped, because a silent import that discarded nine of sixty rows produces a report that
+  looks complete and is not. Clustering is the same `clusterVectors` the workspace view
+  uses, at the same threshold, so a department cannot get one answer here and another there.
 - **`lib/db/orgs` + `lib/orgs`** — organisations: a lab, class, or cohort on one plan. Members
   join automatically by verified email domain, and mentors can read and comment on the whole
   workspace's projects without being invited to each one. Domain claims are checked against the
@@ -247,7 +308,7 @@ lib/ai/*        lib/search/*   ← swappable AI provider + web-search provider
 
 ## 🗄️ Database Architecture
 
-IdeaForge uses **MongoDB Atlas** for persistence. Connections are managed via a single shared connection pool per process (`src/lib/db/index.ts`) with retry-cooldown logic to prevent connection stampedes on shared M0 clusters.
+Scrutan uses **MongoDB Atlas** for persistence. Connections are managed via a single shared connection pool per process (`src/lib/db/index.ts`) with retry-cooldown logic to prevent connection stampedes on shared M0 clusters.
 
 ### Database Collections & Indexes
 
@@ -279,7 +340,7 @@ IdeaForge uses **MongoDB Atlas** for persistence. Connections are managed via a 
    - Asserts `audience` matches `<FIREBASE_PROJECT_ID>`.
    - Eliminates the need for storing private `firebase-admin` service account keys on the server.
 2. **Session Security**:
-   Authenticated sessions issue a secure, encrypted HTTP-only cookie (`ideaforge_session`) preventing client-side script theft (XSS mitigation).
+   Authenticated sessions issue a secure, encrypted HTTP-only cookie (`scrutan_session`) preventing client-side script theft (XSS mitigation).
 3. **Password Security**:
    Email/password sign-up encrypts credentials using Node's native `crypto` PBKDF2 hashing with salt. Verification links and password reset tokens are single-use and auto-expire via MongoDB TTL indexes.
 4. **Billing Production Safeguard**:
@@ -348,6 +409,9 @@ Create a `.env.local` file in the root directory. Use the following template:
 # Database Configuration (Required)
 # -----------------------------------------------------------------------------
 MONGODB_URI=mongodb+srv://<USER>:<PASSWORD>@<CLUSTER>.mongodb.net/?retryWrites=true&w=majority
+# Set this explicitly. The code default changed to "scrutan" with the rename, so
+# an existing deployment that relied on the default must name the old database
+# here — or rename it in Atlas — to avoid pointing at an empty one.
 MONGODB_DB=ideaforge
 MONGODB_MAX_POOL_SIZE=10
 
@@ -385,7 +449,7 @@ NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_web_api_key
 # Email Service (Resend for Email Verification & Password Resets)
 # -----------------------------------------------------------------------------
 RESEND_API_KEY=your_resend_api_key
-EMAIL_FROM=IdeaForge <noreply@yourdomain.com>
+EMAIL_FROM=Scrutan <noreply@yourdomain.com>
 
 # -----------------------------------------------------------------------------
 # Telegram Bot Agent
@@ -443,13 +507,13 @@ CRON_SECRET=your_cron_secret_key
 
 ## 🧪 Testing & Quality Evaluation
 
-IdeaForge includes comprehensive evaluation and maintenance scripts:
+Scrutan includes comprehensive evaluation and maintenance scripts:
 
 ### 1. AI Output Quality & Benchmark Evaluation
 Runs the evaluation harness (`scripts/eval/run.mjs`) against the benchmark dataset (`scripts/eval/golden-set.json`):
 ```bash
 # Run full evaluation suite (requires local running dev server and EVAL_COOKIE)
-EVAL_COOKIE="ideaforge_session=your_session_cookie" npm run eval
+EVAL_COOKIE="scrutan_session=your_session_cookie" npm run eval
 
 # Run specific slice (e.g. honesty, ranking, robustness)
 npm run eval:fast
@@ -464,13 +528,37 @@ Asserts WCAG 2.1 AA contrast compliance for all color tokens defined in `src/app
 npm run check:contrast
 ```
 
-### 3. Database Migration & Tests
+### 3. Database & Repository Tests
+Every repository function, the verification stack and the cohort importer, asserted against a
+real MongoDB — the suite checks index behaviour, TTL reaping and delete cascades, none of
+which a fake would reproduce:
+```bash
+npm run test:db
+```
+
+### 4. Claim-Support Calibration
+The two thresholds that decide whether a claim is *stated*, *related* or *not in the source*
+are swept against the hand-labelled set documented in [`DATASET.md`](DATASET.md), and the
+sweep doubles as a pass/fail gate that CI runs on every pull request:
+```bash
+npm run eval:claims                  # sweep, print the table and the ablation
+npm run eval:claims -- --assert      # the same, as a gate (exits 1 on regression)
+npm run eval:claims -- --model=lexical --entail=none   # ablations
+
+npm run eval:sample   -- --out=unlabelled.json --limit=40  # pairs from checks already run
+npm run eval:generate -- --ideas=5 --out=unlabelled.json   # or generate fresh ones (costs credit)
+```
+`eval:sample` pulls the pairs the model found hardest out of briefings that have actually
+been checked, **with the verdict removed** — so whoever labels them is judging the pair
+rather than agreeing with the machine. The labelled set is published at `/quality/dataset`.
+
+### 5. Full Evaluation Against the Golden Set
 ```bash
 EVAL_COOKIE="scrutan_session=…" npm run eval            # all 30 cases
-EVAL_COOKIE="…" npm run eval:publish                      # publish the scoreboard to /quality
-EVAL_COOKIE="…" npm run eval:fast                         # deploy gate, no live search
+EVAL_COOKIE="…" npm run eval:publish                    # publish the scoreboard to /quality
+EVAL_COOKIE="…" npm run eval:fast                       # deploy gate, no live search
 EVAL_COOKIE="…" npm run eval -- --tag=grounding --repeat=3
-EVAL_COOKIE="…" npm run eval:baseline                     # record the current run
+EVAL_COOKIE="…" npm run eval:baseline                   # record the current run
 ```
 
 ---
@@ -503,7 +591,7 @@ Render hosts persistent Node.js instances, making it the simplest environment fo
 1. **Zero Link Hallucinations by Construction**:
    To prevent LLMs from generating broken or hallucinated URLs, the system never allows the LLM to write URLs directly. The search engine (Tavily) fetches raw web results, assigns numbered indices (`[1]`, `[2]`), and hands these to the prompt. The LLM returns citation markers, and the server constructs the citation payload exclusively from verified search results.
 2. **Separation of LLM Scoring from Ranking**:
-   In comparison mode, asking LLMs to score and rank ideas independently results in uniform 7/10 ratings ("everything is good"). IdeaForge forces the LLM to rate ideas relatively on 4 discrete axes, while a deterministic code algorithm computes weighted totals and orders the ranking.
+   In comparison mode, asking LLMs to score and rank ideas independently results in uniform 7/10 ratings ("everything is good"). Scrutan forces the LLM to rate ideas relatively on 4 discrete axes, while a deterministic code algorithm computes weighted totals and orders the ranking.
 3. **Serverless & Long-Polling Dual Worker Architecture**:
    The background agent handler automatically detects serverless environments (`VERCEL`) and switches between in-process `setInterval` / long-polling (Render/Local) and Vercel Cron / Webhook mechanisms.
 4. **Lightweight Server-Side Token Verification (`jose`)**:
@@ -516,7 +604,7 @@ Render hosts persistent Node.js instances, making it the simplest environment fo
 - [ ] **Cumulative Per-User Spend Caps**: Implement daily sliding-window token budget limits per user tier.
 - [ ] **Redis Pub/Sub SSE Scaling**: Upgrade Server-Sent Events from single-process memory fan-out to Redis Pub/Sub for multi-instance deployments.
 - [ ] **Collaborative Live Workspace**: Enable multi-user simultaneous real-time editing on build plans.
-- [ ] **Custom Domain White-Labeling**: Allow Campus & Enterprise clients to host IdeaForge under custom university/incubator subdomains.
+- [ ] **Custom Domain White-Labeling**: Allow Campus & Enterprise clients to host Scrutan under custom university/incubator subdomains.
 
 ---
 

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { canCreateProject } from "@/lib/billing/entitlements";
+import { attachRecentUsage } from "@/lib/db/tokens";
 import {
   addWorkspaceItem,
   createProject,
@@ -49,6 +50,7 @@ export async function saveProjectAction(
   const title = input.plan?.title?.trim() || smartTitle(input.title?.trim() || input.idea);
   if (input.id) {
     await updateProjectArtifacts(input.id, userId, { ...input, userId, title });
+    void attachRecentUsage(userId, input.id);
     revalidatePath("/dashboard");
     revalidatePath(`/projects/${input.id}`);
     return { id: input.id };
@@ -60,6 +62,8 @@ export async function saveProjectAction(
   if (!gate.allowed) throw new Error(gate.reason ?? "Project limit reached.");
 
   const project = await createProject({ ...input, userId, title });
+  // The runs that produced this happened before it existed; claim them now.
+  void attachRecentUsage(userId, project.id);
   void track(EVENTS.PROJECT_SAVED, { userId, props: { hasResearch: !!input.research, hasPlan: !!input.plan } });
   revalidatePath("/dashboard");
   return { id: project.id };

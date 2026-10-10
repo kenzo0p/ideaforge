@@ -264,6 +264,80 @@ export interface CohortNovelty {
   truncated: boolean;
 }
 
+export interface VectorItem {
+  vector: number[];
+}
+
+export interface ClusterResult {
+  /** Index groups of size 2+, tightest first. */
+  groups: number[][];
+  /** Highest similarity each item has to anything it was grouped with. */
+  closest: number[];
+  /** Peak similarity within each group, aligned with `groups`. */
+  peaks: number[];
+}
+
+/**
+ * Connected components over the pairs that cross `threshold`.
+ *
+ * Extracted so a workspace's saved projects and an imported cohort's
+ * submissions are grouped by the same code. They are different corpora with
+ * different storage, and the moment the two had their own copy of this the
+ * copies would start to disagree about what counts as a lookalike.
+ *
+ * Not pairwise: if A resembles B and B resembles C, all three belong in front
+ * of the same person even when A and C do not directly cross the threshold.
+ * Three people converging on one idea from different wordings is exactly the
+ * case worth catching, and pairwise reporting shows it as two unrelated
+ * warnings.
+ */
+export function clusterVectors(items: VectorItem[], threshold: number): ClusterResult {
+  const n = items.length;
+  const parent = items.map((_, i) => i);
+  const find = (i: number): number => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  };
+  const union = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[rb] = ra;
+  };
+
+  const closest = new Array<number>(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const score = cosine(items[i].vector, items[j].vector);
+      if (score < threshold) continue;
+      union(i, j);
+      closest[i] = Math.max(closest[i], score);
+      closest[j] = Math.max(closest[j], score);
+    }
+  }
+
+  const byRoot = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    if (closest[i] === 0) continue; // in no pair, so in no cluster
+    const root = find(i);
+    byRoot.set(root, [...(byRoot.get(root) ?? []), i]);
+  }
+
+  const entries = [...byRoot.values()].map((idxs) => ({
+    idxs,
+    peak: Math.max(...idxs.map((i) => closest[i])),
+  }));
+  entries.sort((a, b) => b.peak - a.peak);
+
+  return {
+    groups: entries.map((e) => e.idxs),
+    closest: closest.map((x) => Number(x.toFixed(3))),
+    peaks: entries.map((e) => Number(e.peak.toFixed(3))),
+  };
+}
+
 /**
  * Group a workspace's ideas into clusters of lookalikes.
  *
@@ -301,49 +375,9 @@ export async function clusterWorkspaceIdeas(input: {
 
   if (docs.length < 2) return { ...empty, indexed: docs.length, truncated: total > docs.length };
 
-  // Union-find over the pairs that cross the threshold.
-  const parent = docs.map((_, i) => i);
-  const find = (i: number): number => {
-    while (parent[i] !== i) {
-      parent[i] = parent[parent[i]];
-      i = parent[i];
-    }
-    return i;
-  };
-  const union = (a: number, b: number) => {
-    const ra = find(a);
-    const rb = find(b);
-    if (ra !== rb) parent[rb] = ra;
-  };
+  const { groups, closest, peaks } = clusterVectors(docs, threshold);
 
-  // Highest similarity each idea has to anything it was grouped with.
-  const closest = new Array<number>(docs.length).fill(0);
-  let peakOf = new Map<number, number>();
-
-  for (let i = 0; i < docs.length; i++) {
-    for (let j = i + 1; j < docs.length; j++) {
-      const score = cosine(docs[i].vector, docs[j].vector);
-      if (score < threshold) continue;
-      union(i, j);
-      closest[i] = Math.max(closest[i], score);
-      closest[j] = Math.max(closest[j], score);
-    }
-  }
-
-  const groups = new Map<number, number[]>();
-  for (let i = 0; i < docs.length; i++) {
-    if (closest[i] === 0) continue; // in no pair, so in no cluster
-    const root = find(i);
-    const g = groups.get(root) ?? [];
-    g.push(i);
-    groups.set(root, g);
-  }
-
-  peakOf = new Map(
-    [...groups].map(([root, idxs]) => [root, Math.max(...idxs.map((i) => closest[i]))]),
-  );
-
-  const memberIndices = [...groups.values()].flat();
+  const memberIndices = groups.flat();
   if (memberIndices.length === 0) {
     return { ...empty, indexed: docs.length, truncated: total > docs.length };
   }
@@ -371,7 +405,7 @@ export async function clusterWorkspaceIdeas(input: {
   const ownerById = new Map(owners.map((o) => [o._id, o]));
 
   const clusters: IdeaCluster[] = [];
-  for (const [root, idxs] of groups) {
+  for (const [g, idxs] of groups.entries()) {
     const members = idxs.flatMap<ClusterMember>((i) => {
       const p = projectById.get(docs[i].projectId);
       // A vector whose project is gone is stale, not a finding.
@@ -385,7 +419,7 @@ export async function clusterWorkspaceIdeas(input: {
         createdAt: p.createdAt,
         ownerName: owner?.name ?? null,
         ownerUsername: owner?.username ?? null,
-        closest: Number(closest[i].toFixed(3)),
+        closest: closest[i],
       }];
     });
 
@@ -395,13 +429,11 @@ export async function clusterWorkspaceIdeas(input: {
     clusters.push({
       id: members.map((m) => m.projectId).sort().join(":").slice(0, 64),
       members,
-      peak: Number((peakOf.get(root) ?? 0).toFixed(3)),
+      peak: peaks[g],
     });
   }
-
-  // Tightest first: the pair most likely to be the same project is the one a
-  // mentor should look at before their attention runs out.
-  clusters.sort((a, b) => b.peak - a.peak);
+  // clusterVectors already ordered them tightest-first, which is the order a
+  // mentor should read them in before their attention runs out.
 
   return {
     clusters,

@@ -1,3 +1,4 @@
+import { estimateTokens, record } from "./usage";
 import type { AIProvider, GenerateOptions } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -18,6 +19,17 @@ export class MockProvider implements AIProvider {
     const idea = lastUserMessage(options.messages);
     const text = render(task, idea);
 
+    // Nothing here calls a model, so there is no real count to report. The
+    // figure is derived from length and flagged as an estimate, so demo mode
+    // shows a plausible number without ever passing a guess off as measured.
+    record({
+      inputTokens: estimateTokens(options.messages.map((m) => m.content).join(" ")),
+      outputTokens: estimateTokens(text),
+      estimated: true,
+      provider: this.id,
+      model: "offline",
+    });
+
     // Stream word-by-word so the UI behaves exactly like a real model.
     for (const token of tokenize(text)) {
       if (options.signal?.aborted) return;
@@ -28,7 +40,15 @@ export class MockProvider implements AIProvider {
 
   async generateText(options: GenerateOptions): Promise<string> {
     const task = readTag(options.messages, "TASK") ?? "generic";
-    return render(task, lastUserMessage(options.messages));
+    const text = render(task, lastUserMessage(options.messages));
+    record({
+      inputTokens: estimateTokens(options.messages.map((m) => m.content).join(" ")),
+      outputTokens: estimateTokens(text),
+      estimated: true,
+      provider: this.id,
+      model: "offline",
+    });
+    return text;
   }
 }
 
@@ -79,6 +99,8 @@ function render(task: string, rawUser: string): string {
     }
     case "agent-reply":
       return agentReply(rawUser.trim());
+    case "prompt-draft":
+      return promptDraft(rawUser.trim());
     case "problem-discovery": {
       const domainLine = rawUser.match(/DOMAIN:\s*(.+)/i)?.[1] ?? "students";
       return problemDiscovery(domainLine.trim());
@@ -267,4 +289,71 @@ The problem is getting more acute because of scale, cost pressure, and rising ex
 
 ### Suggested v1 scope
 Start narrow: solve the single sharpest pain for one clearly-defined user group, prove they'll use it weekly, *then* expand. Resist building the full platform before the core loop is validated.`;
+}
+
+
+/**
+ * Three prompts, offline.
+ *
+ * Templated on purpose — this is the demo provider — but the templates are
+ * filled with the user's actual words so the angles read as being about their
+ * idea rather than about nothing. The lengths differ between the three, because
+ * the feature's whole point is comparing what each would cost, and three
+ * identical lengths would make the comparison look broken.
+ */
+function promptDraft(idea: string): string {
+  const subject = subjectOf(idea);
+  return JSON.stringify({
+    restated: `Whether this is a real problem worth solving, and what a solution would have to do: ${subject}.`,
+    prompts: [
+      {
+        angle: "Problem reality",
+        rationale: `Establishes whether anyone actually suffers from this before any effort goes into solving it.`,
+        prompt:
+          `I am considering building something to address this problem: ${subject}. Before I start, ` +
+          `establish whether this is a real problem. Who specifically experiences it, how ` +
+          `often, and what does it cost them in time or money today? What do they currently ` +
+          `do instead? Cite sources for any figure you give, and if the evidence is thin, ` +
+          `say so plainly rather than filling the gap.`,
+        expectSections: [
+          "Who is affected, specifically",
+          "How often and how badly",
+          "What they do today instead",
+          "Strength of the evidence",
+        ],
+      },
+      {
+        angle: "Existing solutions",
+        rationale: `Finds out whether this is already solved, and how well.`,
+        prompt:
+          `List the products, services and open-source projects that already address this ` +
+          `problem: ${subject}. For each: what it does, who it is for, what it charges, and where it ` +
+          `falls short. Then tell me which gaps are real opportunities and which are gaps ` +
+          `for a good reason. Include links.`,
+        expectSections: [
+          "Existing options with links",
+          "What each does badly",
+          "Genuine gaps",
+          "Gaps that exist for a reason",
+        ],
+      },
+      {
+        angle: "Build feasibility",
+        rationale: "Turns the idea into something a small team could actually ship in a term.",
+        prompt:
+          `Assume I am a student team of three with one term and no budget, working on ` +
+          `this problem: ${subject}. What is the narrowest version worth building? Name the ` +
+          `data we would need and where it comes from, the parts that are genuinely hard, ` +
+          `and the parts that only look hard. Give a week-by-week outline and say what you ` +
+          `would cut first if we fell behind.`,
+        expectSections: [
+          "Narrowest useful version",
+          "Data needed and its source",
+          "What is genuinely hard",
+          "Week-by-week outline",
+          "What to cut first",
+        ],
+      },
+    ],
+  });
 }

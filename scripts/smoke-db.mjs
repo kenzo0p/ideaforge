@@ -29,6 +29,14 @@ const vfy = await import("../src/lib/verify/citations.ts");
 const gnd = await import("../src/lib/db/grounding.ts");
 const seg = await import("../src/lib/verify/segment.ts");
 const clm = await import("../src/lib/verify/claims.ts");
+const entail = await import("../src/lib/verify/entail.ts");
+const csv = await import("../src/lib/cohorts/parse.ts");
+const coh = await import("../src/lib/db/cohorts.ts");
+const usg = await import("../src/lib/ai/usage.ts");
+const tokens = await import("../src/lib/db/tokens.ts");
+const ai = await import("../src/lib/ai/index.ts");
+const fc = await import("../src/lib/pipeline/forecast.ts");
+const pipe = await import("../src/lib/pipeline/index.ts");
 const clmdb = await import("../src/lib/db/claims.ts");
 const shg = await import("../src/lib/verify/shingle.ts");
 const evd = await import("../src/lib/verify/evidence.ts");
@@ -37,6 +45,8 @@ const shash = await import("../src/lib/verify/simhash.ts");
 const indep = await import("../src/lib/verify/independence.ts");
 const sched = await import("../src/lib/plan/schedule.ts");
 const cons = await import("../src/lib/verify/consistency.ts");
+const safe = await import("../src/lib/verify/safe-fetch.ts");
+const ext = await import("../src/lib/verify/external.ts");
 const ent2 = await import("../src/lib/billing/resolve.ts");
 const dom = await import("../src/lib/orgs/domains.ts");
 const ent = await import("../src/lib/billing/plans.ts");
@@ -996,6 +1006,15 @@ console.log("\n\x1b[1mclaim-level verification\x1b[0m");
   eq("a figure present in the source is not",
      clm.figuresMissingFrom("Waste costs 40 crore a year.", "It runs to 40 crore annually."),
      []);
+  // A digit followed by the spelled unit. "over 95 percent" slipped past a
+  // pattern that only knew "%", which is how a fabricated accuracy figure went
+  // unflagged until the calibration set caught it.
+  eq("a percentage written as a word is checked",
+     clm.figuresMissingFrom("Models reach over 95 percent accuracy.", "Accuracy fell to around sixty per cent."),
+     ["95 percent"]);
+  eq("and matches when the source agrees",
+     clm.figuresMissingFrom("Models reach over 95 percent accuracy.", "Accuracy held at 95% in the field."),
+     []);
   eq("a spelled-out quantity is checked too",
      clm.figuresMissingFrom("Payback is under six years.", "Payback runs to eleven or twelve years."),
      ["six years"]);
@@ -1131,6 +1150,428 @@ console.log("\n\x1b[1mcontent fingerprints and drift\x1b[0m");
   await p.deleteProject(proj.id, owner.id);
   eq("deleting a project purges its fingerprints", (await snap.getSnapshots(proj.id)).length, 0);
   await u.deleteUser(owner.id);
+}
+
+console.log("\n\x1b[1mprompt studio\x1b[0m");
+{
+  const f = fc.forecastPrompt("Tell me whether hostel food waste is a real problem.", ["a", "b", "c"]);
+  ok("a prompt's own cost is counted from its text", f.promptTokens > 0);
+  ok("the expected answer is a range, not a point", f.outputLow < f.outputHigh);
+  eq("the headline is prompt plus the middle of that range",
+     f.totalMid, f.promptTokens + Math.round((f.outputLow + f.outputHigh) / 2));
+
+  // More sections asked for means a longer answer expected — that is the
+  // property the forecast rests on.
+  const few = fc.forecastPrompt("Same prompt text here for both.", ["one"]);
+  const many = fc.forecastPrompt("Same prompt text here for both.", ["one", "two", "three", "four"]);
+  ok("asking for more sections forecasts a longer answer", many.totalMid > few.totalMid);
+
+  const summed = fc.sumForecasts([
+    { forecast: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 } },
+    { forecast: { promptTokens: 20, outputLow: 200, outputHigh: 400, totalMid: 320 } },
+  ]);
+  eq("a batch total adds the prompts", summed.promptTokens, 30);
+  eq("and the midpoints", summed.totalMid, 480);
+
+  // Recommendations are computed from the text, so they are checkable.
+  const vague = fc.recommend({
+    idea: "an app for stuff",
+    prompts: [{ angle: "A", expectSections: ["x", "y", "z"], forecast: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 } }],
+    total: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 },
+  });
+  const kinds = (rs) => rs.map((r) => r.kind);
+  ok("a vague idea is told it is short", vague.some((r) => r.title.includes("very short")));
+  ok("and that nobody is named", vague.some((r) => r.title.includes("No one is named")));
+  ok("and that no outcome is measurable", vague.some((r) => r.title.includes("No outcome")));
+  ok("the cost is always reported", kinds(vague).includes("cost"));
+  ok("and something is always recommended first", kinds(vague).includes("pick"));
+
+  const sharp = fc.recommend({
+    idea: "Predict how many students eat dinner in a hostel mess to reduce food waste",
+    prompts: [{ angle: "A", expectSections: ["x", "y", "z"], forecast: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 } }],
+    total: { promptTokens: 10, outputLow: 100, outputHigh: 200, totalMid: 160 },
+  });
+  eq("a sharp idea is not told to sharpen it",
+     sharp.filter((r) => r.kind === "sharpen").length, 0);
+
+  const big = fc.recommend({
+    idea: "Predict hostel dinner headcount to reduce student food waste",
+    prompts: [{ angle: "A", expectSections: ["x"], forecast: { promptTokens: 100, outputLow: 1, outputHigh: 2, totalMid: 20000 } }],
+    total: { promptTokens: 100, outputLow: 9000, outputHigh: 15000, totalMid: 20000 },
+  });
+  ok("a large batch is flagged", big.some((r) => r.kind === "warn"));
+
+  // End to end through the pipeline. Demo mode is enough — the prompts are
+  // templated but the counting and the advice are the real code — and it is the
+  // only deterministic option, so a live provider skips rather than spending
+  // money to assert something the mock already proves.
+  if (!ai.getProvider().isMock) {
+    console.log("  \x1b[33m⚠ a live provider is configured — skipping the end-to-end draft\x1b[0m");
+  } else {
+  const set = await pipe.getPipeline().draftPrompts({ idea: "A tool that helps hostel kitchens predict dinner headcount" });
+  ok("at least three prompts are drafted", set.prompts.length >= 3);
+  ok("each carries its own forecast", set.prompts.every((x) => x.forecast.totalMid > 0));
+  ok("the angles are distinct", new Set(set.prompts.map((x) => x.angle)).size === set.prompts.length);
+  ok("every prompt is self-contained enough to paste", set.prompts.every((x) => x.prompt.length > 80));
+  ok("each says what a good answer contains", set.prompts.every((x) => x.expectSections.length > 0));
+  eq("the batch total is the sum of the parts",
+     set.totalForecast.totalMid,
+     set.prompts.reduce((n, x) => n + x.forecast.totalMid, 0));
+  ok("the idea is restated back", set.restated.length > 0);
+  ok("recommendations follow the prompts", set.recommendations.length > 0);
+  }
+}
+
+console.log("\n\x1b[1mtoken accounting\x1b[0m");
+{
+  eq("an empty total is zero", usg.totalTokens(usg.EMPTY_USAGE), 0);
+  eq("recording outside a scope is a no-op, not a crash",
+     (usg.record({ inputTokens: 5, outputTokens: 5, estimated: false, provider: "x", model: "y" }), usg.current()),
+     null);
+
+  const { result, usage } = await usg.withUsage(async () => {
+    usg.record({ inputTokens: 100, outputTokens: 40, estimated: false, provider: "anthropic", model: "m" });
+    usg.record({ inputTokens: 20, outputTokens: 10, estimated: false, provider: "anthropic", model: "m" });
+    return "done";
+  });
+  eq("the callback's value comes back", result, "done");
+  eq("input tokens add up", usage.inputTokens, 120);
+  eq("output tokens add up", usage.outputTokens, 50);
+  eq("each call is counted", usage.calls, 2);
+  eq("and the total is the sum", usg.totalTokens(usage), 170);
+  eq("a measured total is not marked estimated", usage.estimated, false);
+
+  // Deeply nested work must still land in the surrounding scope — that is the
+  // whole reason the counter travels in the async context.
+  const nested = await usg.withUsage(async () => {
+    const inner = async () => {
+      await new Promise((r) => setTimeout(r, 1));
+      usg.record({ inputTokens: 7, outputTokens: 3, estimated: true, provider: "mock", model: "offline" });
+    };
+    await Promise.all([inner(), inner()]);
+  });
+  eq("nested async calls are counted", nested.usage.calls, 2);
+  eq("and one estimate taints the total", nested.usage.estimated, true);
+
+  // Streaming: usage reported mid-stream still lands in the right scope.
+  const counted = usg.streamWithUsage(async function* () {
+    yield "a";
+    usg.record({ inputTokens: 11, outputTokens: 4, estimated: false, provider: "p", model: "m" });
+    yield "b";
+  });
+  let streamed = "";
+  for await (const chunk of counted.stream) streamed += chunk;
+  eq("the stream still yields its chunks", streamed, "ab");
+  eq("usage reported mid-stream is captured", counted.usage().inputTokens, 11);
+
+  // The trailer that carries a total to the browser.
+  const wire = "Some prose." + usg.encodeUsage({ ...usg.EMPTY_USAGE, inputTokens: 9, outputTokens: 2, calls: 1 });
+  const decoded = usg.decodeUsage(wire);
+  eq("the prose survives the round trip", decoded.text, "Some prose.");
+  eq("and so does the total", decoded.usage.inputTokens, 9);
+  eq("a body with no trailer decodes to itself", usg.decodeUsage("plain").text, "plain");
+  eq("and reports no usage", usg.decodeUsage("plain").usage, null);
+  eq("a truncated trailer costs the number, not the answer",
+     usg.decodeUsage("prose" + usg.USAGE_MARKER + "{bad").text, "prose");
+
+  // The offline provider has no real count, and must say so.
+  const mock = ai.getProvider();
+  if (mock.isMock) {
+    const demo = await usg.withUsage(async () => {
+      let out = "";
+      for await (const c of mock.streamText({ messages: [{ role: "user", content: "an idea about food waste" }] })) out += c;
+      return out;
+    });
+    ok("demo mode still reports a figure", usg.totalTokens(demo.usage) > 0);
+    eq("and flags it as an estimate", demo.usage.estimated, true);
+  } else {
+    console.log("  \x1b[33m⚠ a live provider is configured — skipping the demo-mode check\x1b[0m");
+  }
+
+  // Storage.
+  const owner = await u.createUser(`tok-${Date.now()}@example.test`, "salt:hash", "Token Owner");
+  const proj = await p.createProject({ userId: owner.id, title: "T", idea: "Counting tokens" });
+
+  await tokens.recordUsage({ userId: owner.id, projectId: proj.id, operation: "validate",
+    usage: { ...usg.EMPTY_USAGE, inputTokens: 100, outputTokens: 50, calls: 1 } });
+  await tokens.recordUsage({ userId: owner.id, projectId: proj.id, operation: "research",
+    usage: { ...usg.EMPTY_USAGE, inputTokens: 800, outputTokens: 300, calls: 4 } });
+  await tokens.recordUsage({ userId: owner.id, projectId: proj.id, operation: "research",
+    usage: { ...usg.EMPTY_USAGE, inputTokens: 200, outputTokens: 100, calls: 2 } });
+
+  // A run that reported nothing is a failed run, not a free one.
+  await tokens.recordUsage({ userId: owner.id, projectId: proj.id, operation: "plan", usage: usg.EMPTY_USAGE });
+
+  const pu = await tokens.projectUsage(proj.id);
+  eq("the project total sums every run", pu.total.totalTokens, 1550);
+  eq("runs are counted", pu.total.runs, 3);
+  eq("and so are the model calls beneath them", pu.total.calls, 7);
+  eq("a run that reported nothing is not stored", pu.byOperation.some((o) => o.operation === "plan"), false);
+  eq("the breakdown is ordered by cost", pu.byOperation[0].operation, "research");
+  eq("and groups repeated runs of one operation", pu.byOperation[0].total.runs, 2);
+
+  const uu = await tokens.userUsage(owner.id);
+  eq("the user total matches the project total", uu.total.totalTokens, 1550);
+  eq("a future window excludes everything", (await tokens.userUsage(owner.id, Date.now() + 1000)).total.runs, 0);
+
+  const last = await tokens.latestRun(owner.id);
+  ok("the most recent run is retrievable", last !== null);
+
+  // Runs happen before a project exists and are claimed when it is saved.
+  await tokens.recordUsage({ userId: owner.id, operation: "validate",
+    usage: { ...usg.EMPTY_USAGE, inputTokens: 10, outputTokens: 5, calls: 1 } });
+  const proj2 = await p.createProject({ userId: owner.id, title: "T2", idea: "Another idea" });
+  eq("an unattached run is claimed by a new project",
+     await tokens.attachRecentUsage(owner.id, proj2.id), 1);
+  eq("and then belongs to it", (await tokens.projectUsage(proj2.id)).total.totalTokens, 15);
+  eq("claiming again finds nothing left", await tokens.attachRecentUsage(owner.id, proj2.id), 0);
+
+  await p.deleteProject(proj.id, owner.id);
+  eq("deleting a project purges its usage", (await tokens.projectUsage(proj.id)).total.runs, 0);
+  await p.deleteProject(proj2.id, owner.id);
+  await u.deleteUser(owner.id);
+  eq("deleting a user purges theirs", (await tokens.userUsage(owner.id)).total.runs, 0);
+}
+
+console.log("\n\x1b[1mcohort import (delimited parsing)\x1b[0m");
+{
+  // Everything a real spreadsheet export actually contains.
+  const rows = csv.parseDelimited('a,"b,with,commas",c\r\n"say ""hi""",plain,"multi\nline"\n');
+  eq("a quoted field keeps its commas", rows[0][1], "b,with,commas");
+  eq("a doubled quote is a literal quote", rows[1][0], 'say "hi"');
+  eq("a field may contain a newline", rows[1][2], "multi\nline");
+  eq("CRLF does not leave a stray carriage return", rows[0][2], "c");
+  eq("a trailing newline makes no phantom row", rows.length, 2);
+
+  eq("tab-separated data is detected", csv.sniffDelimiter("a\tb\tc\n1\t2\t3"), "\t");
+  eq("comma-separated data is detected", csv.sniffDelimiter("a,b,c\n1,2,3"), ",");
+  eq("European semicolons are detected", csv.sniffDelimiter("a;b;c\n1;2;3"), ";");
+
+  const sheet =
+    "\ufeffRoll No,Student Name,Project Title,Idea Description\n" +
+    '21CS001,Aarav Shah,"Mess waste, predicted","A campus tool that forecasts hostel dinner headcount"\n' +
+    "21CS002,Diya Nair,Lab Matcher,\"Matches students to research labs by their interests\"\n" +
+    "21CS003,Rohan Iyer,,\n" +
+    "21CS004,Meera Rao,Short,tiny\n";
+  const parsed = csv.parseSubmissions(sheet);
+
+  eq("usable rows are kept", parsed.rows.length, 2);
+  eq("a byte-order mark does not break the first header", parsed.columns.studentRef, "Roll No");
+  eq("the idea column is found by name", parsed.columns.idea, "Idea Description");
+  eq("a comma inside a quoted title survives", parsed.rows[0].title, "Mess waste, predicted");
+  eq("an empty row is reported with its line number",
+     parsed.skipped.find((x) => x.line === 4)?.why, "No idea text.");
+  ok("and one too short to compare says so",
+     parsed.skipped.some((x) => x.line === 5 && x.why.includes("too short")));
+
+  // "id" is a substring of "Idea": matching on substrings assigned the
+  // description column as the student identifier until this was word-bounded.
+  const tsv = csv.parseSubmissions("Name\tTitle\tIdea\nAsha\tSolar\tRooftop solar payback estimator for households\n");
+  eq("a tabbed clipboard paste is read", tsv.rows.length, 1);
+  eq("the idea column is not stolen by a short alias", tsv.columns.idea, "Idea");
+  eq("and the student reference stays unassigned rather than wrong",
+     tsv.columns.studentRef, undefined);
+
+  eq("a sheet with no idea column is refused, not guessed",
+     csv.parseSubmissions("foo,bar\n1,2\n").rows.length, 0);
+  eq("empty input parses to nothing", csv.parseSubmissions("").rows.length, 0);
+
+  // The export has to be re-readable by the reader beside it. A report whose
+  // own CSV this parser choked on would be an embarrassing thing to ship next
+  // to a citation checker.
+  const out = csv.toCsv([
+    ["Student", "Title", "Idea"],
+    ["Aarav", 'Mess waste, predicted', 'He said "cut it" — and\nmeant it'],
+    ["Diya", "Plain", "Nothing special"],
+  ]);
+  const round = csv.parseDelimited(out);
+  eq("a comma in an exported field survives the round trip", round[1][1], "Mess waste, predicted");
+  eq("so do quotes and newlines", round[1][2], 'He said "cut it" — and\nmeant it');
+  eq("a field needing no quoting is left alone", round[2][1], "Plain");
+  ok("only the fields that need quotes get them", out.includes("Diya,Plain,"));
+}
+
+console.log("\n\x1b[1mcohort report\x1b[0m");
+{
+  const org = `org-${Date.now()}`;
+  const row = (studentName, title, idea) => ({ studentName, studentRef: null, title, idea });
+
+  const outcome = await coh.importCohort({
+    orgId: org, batch: "2026",
+    rows: [
+      row("Aarav", "Mess Forecast", "A campus tool that matches students to research labs by interest"),
+      row("Diya", "Lab Finder", "A campus tool that matches students to research labs by interest"),
+      row("Kabir", "Air Monitor", "A hardware sensor that measures classroom air quality each period"),
+    ],
+  });
+  eq("every row is imported", outcome.imported, 3);
+  eq("with none failing", outcome.failed, 0);
+
+  const batches = await coh.listBatches(org);
+  eq("the batch is listed", batches.length, 1);
+  eq("with its count", batches[0].count, 3);
+
+  const report = await coh.cohortReport({ orgId: org, batch: "2026" });
+  eq("every submission is scored", report.submissions.length, 3);
+  eq("two identical proposals are grouped", report.groups.length, 1);
+  eq("and the group holds both", report.groups[0].ids.length, 2);
+  eq("both are counted as clustered", report.clustered, 2);
+
+  const kabir = report.submissions.find((x) => x.studentName === "Kabir");
+  const aarav = report.submissions.find((x) => x.studentName === "Aarav");
+  ok("a distinct proposal scores high on distinctiveness", kabir.novelty > 0.5);
+  ok("a duplicated one scores low", aarav.novelty < 0.3);
+  eq("and names who it resembles", aarav.resembles.length, 1);
+  eq("the distinct one resembles nobody", kabir.resembles.length, 0);
+
+  // Re-import replaces rather than appends: correcting a sheet must not double
+  // every row and manufacture a batch full of duplicates.
+  await coh.importCohort({ orgId: org, batch: "2026", rows: [row("Aarav", "Mess Forecast", "A campus tool that matches students to research labs by interest")] });
+  eq("re-importing a batch replaces it", (await coh.listBatches(org))[0].count, 1);
+
+  eq("another workspace sees none of it",
+     (await coh.cohortReport({ orgId: "someone-else", batch: "2026" })).submissions.length, 0);
+
+  eq("a batch can be deleted", await coh.deleteBatch(org, "2026"), 1);
+  eq("and is then gone", (await coh.listBatches(org)).length, 0);
+}
+
+console.log("\n\x1b[1mentailment (contradiction detection)\x1b[0m");
+{
+  const off = entail.makeEntailer("none");
+  eq("a disabled entailer names itself", off.id, "none");
+  eq("and returns no judgement rather than a zero", await off.score("a", "b"), null);
+
+  const nli = entail.makeEntailer("nli");
+  const judged = await nli.score(
+    "The study concluded that extreme short-duration rainfall was the dominant factor, " +
+      "overwhelming drainage networks that were performing to specification.",
+    "Urban flooding in Indian cities is driven more by blocked drains than by rainfall intensity.",
+  );
+
+  if (judged === null) {
+    console.log("  \x1b[33m⚠ entailment model unavailable — skipping (this is a supported state)\x1b[0m");
+  } else {
+    ok("the three labels sum to one",
+       Math.abs(judged.contradiction + judged.entailment + judged.neutral - 1) < 0.01);
+    ok("a passage arguing the opposite is called a contradiction",
+       judged.contradiction >= entail.CONTRADICTION_AT);
+    // The one the phrase list could not reach: no refutation vocabulary appears
+    // in that passage at all, and this is why the model earns its memory.
+    eq("and the phrase list alone would have missed it",
+       clm.refutationIn(
+         "The study concluded that extreme short-duration rainfall was the dominant factor.",
+         "Urban flooding is driven more by blocked drains than by rainfall intensity.",
+       ),
+       null);
+
+    const supported = await nli.score(
+      "Surveys of residential campus kitchens found that about 33 percent of cooked food is discarded.",
+      "Roughly a third of food prepared in college hostel messes is thrown away.",
+    );
+    ok("a genuinely supporting passage is not called a contradiction",
+       supported.contradiction < entail.CONTRADICTION_AT);
+  }
+}
+
+console.log("\n\x1b[1maddress guard (SSRF)\x1b[0m");
+{
+  // The addresses that matter. Cloud metadata first: it hands out instance
+  // credentials to anything inside the network that can make an HTTP request,
+  // which is exactly what a public "fetch this URL" endpoint is.
+  for (const [ip, note] of [
+    ["169.254.169.254", "cloud metadata"],
+    ["127.0.0.1", "loopback"],
+    ["10.1.2.3", "private /8"],
+    ["172.16.0.1", "private /12"],
+    ["192.168.1.1", "private /16"],
+    ["100.64.0.1", "carrier-grade NAT"],
+    ["0.0.0.0", "this network"],
+    ["::1", "IPv6 loopback"],
+    ["fd00::1", "IPv6 unique-local"],
+    ["fe80::1", "IPv6 link-local"],
+    ["::ffff:169.254.169.254", "IPv4-mapped metadata"],
+    ["not-an-ip", "unparseable"],
+  ]) {
+    ok(`${note} (${ip}) is refused`, safe.isPrivateAddress(ip));
+  }
+  for (const [ip, note] of [
+    ["8.8.8.8", "public IPv4"],
+    ["172.32.0.1", "just outside the private /12"],
+    ["2606:4700:4700::1111", "public IPv6"],
+    ["::ffff:8.8.8.8", "IPv4-mapped public"],
+  ]) {
+    ok(`${note} (${ip}) is allowed`, !safe.isPrivateAddress(ip));
+  }
+
+  eq("a metadata URL is blocked by address",
+     (await safe.checkUrl("http://169.254.169.254/latest/meta-data/")).reason, "private-address");
+  eq("localhost resolves to a private address and is blocked",
+     (await safe.checkUrl("http://localhost/")).reason, "private-address");
+  eq("a bracketed IPv6 loopback is blocked",
+     (await safe.checkUrl("http://[::1]/")).reason, "private-address");
+  eq("a non-web port is refused",
+     (await safe.checkUrl("http://example.com:27017/")).reason, "port");
+  eq("a file URL is refused", (await safe.checkUrl("file:///etc/passwd")).reason, "scheme");
+  eq("a javascript URL is refused",
+     (await safe.checkUrl("javascript:alert(1)")).reason, "scheme");
+  eq("a public URL passes", await safe.checkUrl("https://example.com/ok"), null);
+
+  // The guard must not describe what it resolved: doing so would turn the
+  // refusal message into the internal port scanner it exists to prevent.
+  const blocked = await safe.checkUrl("http://169.254.169.254/");
+  ok("the refusal never names the address it resolved",
+     !blocked.message.includes("169.254"));
+}
+
+console.log("\n\x1b[1mpublic answer checking\x1b[0m");
+{
+  const prep = ext.prepareSources([
+    "https://example.com/a", "  https://example.com/a#frag  ", "http://example.org/b",
+    "javascript:alert(1)", "not a url", "",
+    ...Array.from({ length: 14 }, (_, i) => `https://s${i}.example.com/`),
+  ]);
+  eq("sources are capped", prep.citations.length, ext.MAX_SOURCES);
+  eq("and numbered from one",
+     prep.citations.map((c) => c.id), Array.from({ length: ext.MAX_SOURCES }, (_, i) => i + 1));
+  eq("the same URL twice collapses rather than erroring",
+     prep.citations.filter((c) => c.url.includes("example.com/a")).length, 1);
+  ok("a non-http scheme is rejected with a reason",
+     prep.rejected.some((r) => r.url.includes("javascript") && r.why.includes("http")));
+  ok("so is something that is not a URL at all",
+     prep.rejected.some((r) => r.why === "Not a URL."));
+  ok("and the overflow says why it was dropped",
+     prep.rejected.some((r) => r.why.includes(String(ext.MAX_SOURCES))));
+
+  // Live network, against endpoints whose behaviour is fixed.
+  const report = await ext.verifyExternal({
+    text: [
+      "This domain is intended for use in illustrative examples within documents [1].",
+      "The domain handles 47.3 million requests every single day [1].",
+      "Quantum satellite mesh routing reduces orbital latency substantially [2].",
+    ].join("\n\n"),
+    urls: [
+      "https://example.com",
+      "https://example.com/definitely-missing-page-404",
+      "http://169.254.169.254/latest/meta-data/",
+    ],
+  });
+
+  eq("every source gets a status", report.sources.length, 3);
+  eq("a live page resolves", report.sources[0].status, "reachable");
+  eq("a 404 does not", report.sources[1].status, "dead");
+  eq("and a private address is refused rather than called dead",
+     report.sources[2].status, "blocked");
+  ok("the reachable ratio reflects that",
+     report.reachableRatio > 0 && report.reachableRatio < 1);
+
+  const byStart = (p) => report.claims.verdicts.find((v) => v.text.startsWith(p));
+  eq("a claim the source states is supported", byStart("This domain is").kind, "supported");
+  ok("a fabricated figure is caught",
+     byStart("The domain handles").unmatchedFigures.some((f) => f.includes("47.3")));
+  eq("a claim whose source would not load is unjudged, not condemned",
+     byStart("Quantum satellite").kind, "unavailable");
+  eq("two URLs on one domain are one source", report.independence.independent, 2);
 }
 
 console.log("\n\x1b[1mcross-artifact consistency\x1b[0m");

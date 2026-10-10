@@ -392,3 +392,52 @@ the dependencies you declare. Respond in locale "${locale}".`,
     },
   ];
 }
+
+
+/**
+ * Ask the model to draft several prompts, not to answer anything.
+ *
+ * The instruction it most needs is the one it will most want to ignore: produce
+ * prompts, not findings. A model handed an idea will start researching it, and
+ * what comes back is a short answer to each angle rather than a prompt that
+ * would produce one.
+ */
+export function promptDraftMessages(idea: string, count: number, locale = "en"): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: `[[TASK:prompt-draft]]
+You are Scrutan Prompt Studio. You do NOT research the idea and you do NOT
+answer any question about it. You write PROMPTS that someone else would run.
+
+Given one rough line, produce ${count} prompts that attack it from genuinely
+different angles — not ${count} rewordings of the same question. Between them
+they should cover whether the problem is real, what already exists, and whether
+it can actually be built.
+
+Each prompt must be self-contained: someone pasting it into a fresh chat, with
+no memory of the original line, must be able to act on it. That means restating
+the idea inside the prompt, naming the audience and setting, and saying exactly
+what sections the answer should contain.
+
+Return a STRICT JSON object (no markdown fences) with this shape:
+{
+  "restated": "the idea in one clear sentence, as you understood it",
+  "prompts": [
+    {
+      "angle": "2-4 words naming the angle, e.g. Market reality",
+      "rationale": "one line on why this angle matters for THIS idea",
+      "prompt": "the full prompt, several sentences, self-contained",
+      "expectSections": ["what a good answer contains", "section 2", "section 3"]
+    }
+  ]
+}
+
+Rules: the angles must not overlap. Every prompt asks for evidence or sources
+where the question is factual. Do not pad a prompt to make it look thorough —
+its length is measured and shown to the user, so wasted words are visible.
+Respond in locale "${locale}".`,
+    },
+    { role: "user", content: idea },
+  ];
+}

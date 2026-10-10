@@ -3,6 +3,8 @@ import { track } from "@/lib/db/analytics";
 import { EVENTS } from "@/lib/analytics/events";
 import { getProvider } from "@/lib/ai";
 import { getPipeline } from "@/lib/pipeline";
+import { withUsage, totalTokens } from "@/lib/ai/usage";
+import { recordUsage } from "@/lib/db/tokens";
 import { detectKind, extractDocument } from "@/lib/extract/document";
 import { enforceRateLimit, requireApiUser } from "@/lib/auth/api";
 
@@ -59,7 +61,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const review = await getPipeline().reviewDocument(
+    const { result: review, usage } = await withUsage(() => getPipeline().reviewDocument(
       {
         fileName: file.name,
         kind,
@@ -69,10 +71,19 @@ export async function POST(req: Request) {
         locale: String(form.get("locale") ?? "en"),
       },
       req.signal,
-    );
+    ));
 
+    void recordUsage({ userId: auth.id, operation: "review", usage });
     return Response.json(review, {
-      headers: { "Cache-Control": "no-store", "X-Provider": getProvider().label },
+      headers: {
+        "Cache-Control": "no-store",
+        "X-Provider": getProvider().label,
+        "X-Tokens-In": String(usage.inputTokens),
+        "X-Tokens-Out": String(usage.outputTokens),
+        "X-Tokens-Total": String(totalTokens(usage)),
+        "X-Tokens-Estimated": String(usage.estimated),
+        "X-Model": usage.model,
+      },
     });
   } catch (err) {
     // The upstream message is for the log, never for the browser: it carries

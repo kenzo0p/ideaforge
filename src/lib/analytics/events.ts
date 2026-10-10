@@ -17,6 +17,7 @@ export const EVENTS = {
   // Activation — the path that decides whether someone ever comes back
   IDEA_VALIDATED: "idea_validated",
   RESEARCH_RUN: "research_run",
+  PROMPTS_DRAFTED: "prompts_drafted",
   PLAN_GENERATED: "plan_generated",
   PROJECT_SAVED: "project_saved",
 
@@ -64,6 +65,7 @@ export type EventName = (typeof EVENTS)[keyof typeof EVENTS];
  */
 export const ACTIVATION_FUNNEL: { event: EventName; label: string }[] = [
   { event: EVENTS.SIGNED_UP, label: "Signed up" },
+  { event: EVENTS.PROMPTS_DRAFTED, label: "Drafted prompts" },
   { event: EVENTS.IDEA_VALIDATED, label: "Validated an idea" },
   { event: EVENTS.RESEARCH_RUN, label: "Ran DeepSearch" },
   { event: EVENTS.PLAN_GENERATED, label: "Generated a plan" },
